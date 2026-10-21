@@ -45,6 +45,7 @@ module EbaySellerApi
 
     def make_request(method, path, options = {})
       return send_request(method, path, options, nil) if options[:form]
+      return application_request(method, path, options) if options[:application_token]
 
       scope = options[:scope]
       raise ArgumentError, "An OAuth scope is required for #{method.upcase} #{path}" if scope.blank?
@@ -67,6 +68,12 @@ module EbaySellerApi
       response = binary_file_body(http_request(method, url, encode_body(options), headers, query))
       log_response(response)
       handle_response(response)
+    end
+
+    def application_request(method, path, options)
+      send_request(method, path, options, oauth.application_access_token)
+    rescue ApiError::InvalidAccessToken
+      send_request(method, path, options, oauth.application_access_token(refresh: true))
     end
 
     def http_request(method, url, body, headers, query)
