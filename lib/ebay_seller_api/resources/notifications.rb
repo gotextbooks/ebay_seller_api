@@ -4,24 +4,23 @@ module EbaySellerApi
   module Resources
     class Notifications < Base
       BASE_PATH = '/commerce/notification/v1'
-      APPLICATION = { application_token: true }.freeze
 
       def self.created_id(response)
         response.headers['location'].to_s.split('/').last.presence
       end
 
       def update_config(data)
-        put('/config', data, **APPLICATION)
+        put('/config', data, **app_token_params)
       end
 
       def create_destination(data)
-        post('/destination', data, **APPLICATION)
+        post('/destination', data, **app_token_params)
       end
 
       def get_destination(destination_id)
         require_id!(:destination_id, destination_id)
 
-        get("/destination/#{segment(destination_id)}", **APPLICATION)
+        get("/destination/#{segment(destination_id)}", **app_token_params)
       end
 
       def create_subscription(data)
@@ -43,10 +42,14 @@ module EbaySellerApi
       def get_public_key(public_key_id)
         require_id!(:public_key_id, public_key_id)
 
-        get("/public_key/#{segment(public_key_id)}", **APPLICATION)
+        get("/public_key/#{segment(public_key_id)}", **app_token_params)
       end
 
       private
+
+      def app_token_params
+        { application_token: true }
+      end
 
       def require_id!(name, id)
         raise ArgumentError, "Missing required argument: #{name}" if id.blank?
