@@ -12,7 +12,6 @@ RSpec.describe EbaySellerApi do
       config.ru_name = 'test_ru_name'
       config.environment = :sandbox
       config.refresh_token = 'test_refresh_token'
-      config.scope = ['https://api.ebay.com/oauth/api_scope/sell.inventory']
       config.listing_schema_version = '1235'
       config.order_report_schema_version = '1355'
       config.order_ack_schema_version = '1.0'
@@ -40,6 +39,10 @@ RSpec.describe EbaySellerApi do
     end.string
   end
 
+  def inventory_tasks
+    EbaySellerApi::Resources::Tasks.new(EbaySellerApi::Client.new, scope: EbaySellerApi::Resources::SELL_INVENTORY)
+  end
+
   def ebay_result_file
     File.binread(File.expand_path('fixtures/ebay_result_file.zip', __dir__))
   end
@@ -60,14 +63,17 @@ RSpec.describe EbaySellerApi do
 
   describe '.oauth' do
     let(:oauth) { described_class.oauth }
+    let(:scope) { EbaySellerApi::Resources::SELL_INVENTORY }
 
     describe '#generate_auth_url' do
-      it "returns eBay's consent page URL" do
+      it "returns eBay's consent page URL asking for every scope the gem uses" do
         url = oauth.generate_auth_url(state: 'xyz state')
 
         expect(url).to eq(
           'https://auth.sandbox.ebay.com/oauth2/authorize?client_id=test_client_id&redirect_uri=test_ru_name' \
-          '&response_type=code&state=xyz%20state&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory'
+          '&response_type=code&state=xyz%20state&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope' \
+          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory' \
+          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment'
         )
       end
     end
@@ -85,7 +91,7 @@ RSpec.describe EbaySellerApi do
         )
       end
 
-      it 'exchanges the code with basic auth and keeps the tokens' do
+      it 'exchanges the code with basic auth and returns the tokens' do
         form = nil
         token_request.with do |req|
           form = URI.decode_www_form(req.body).to_h
@@ -97,16 +103,15 @@ RSpec.describe EbaySellerApi do
           .to have_been_made.once
         expect(form).to eq('grant_type' => 'authorization_code', 'code' => 'the_code', 'redirect_uri' => 'test_ru_name')
         expect(tokens['refresh_token']).to eq('user_refresh_token')
-        expect(oauth.access_token).to eq('user_access_token')
       end
 
-      it 'reuses the obtained access token after reset! with its refresh token' do
-        tokens = oauth.obtain_token('the_code')
-        described_class.config.refresh_token = tokens['refresh_token']
-        described_class.reset!
+      it 'refreshes with the obtained refresh token for the scope a request needs' do
+        oauth.obtain_token('the_code')
+        oauth.access_token(scope)
 
-        expect(described_class.oauth.access_token).to eq('user_access_token')
-        expect(token_request).to have_been_made.once
+        expect(a_request(:post, %r{/identity/v1/oauth2/token})
+          .with(body: { 'grant_type' => 'refresh_token', 'refresh_token' => 'user_refresh_token', 'scope' => scope }))
+          .to have_been_made.once
       end
     end
 
@@ -121,44 +126,43 @@ RSpec.describe EbaySellerApi do
           body: { 'access_token' => 'access_token', 'expires_in' => 7200 }.to_json
         )
 
-        expect(oauth.access_token).to eq('access_token')
+        expect(oauth.access_token(scope)).to eq('access_token')
 
         expect(token_request).to have_been_made.once
-        expect(form['grant_type']).to eq('refresh_token')
-        expect(form['refresh_token']).to eq('test_refresh_token')
+        expect(form).to eq('grant_type' => 'refresh_token', 'refresh_token' => 'test_refresh_token', 'scope' => scope)
       end
 
       it 'keeps the access token in memory until it expires' do
-        oauth.access_token
-        oauth.access_token
-        travel_to(2.hours.from_now - 59.seconds) { oauth.access_token }
+        oauth.access_token(scope)
+        oauth.access_token(scope)
+        travel_to(2.hours.from_now - 59.seconds) { oauth.access_token(scope) }
 
         expect(a_request(:post, %r{/identity/v1/oauth2/token})).to have_been_made.twice
       end
 
       it 'reuses a valid access token after reset!' do
-        oauth.access_token
+        oauth.access_token(scope)
         described_class.reset!
 
-        expect(described_class.oauth.access_token).to eq('access_token')
+        expect(described_class.oauth.access_token(scope)).to eq('access_token')
         expect(a_request(:post, %r{/identity/v1/oauth2/token})).to have_been_made.once
       end
 
       it 'refreshes after reset! once the access token has expired' do
-        oauth.access_token
+        oauth.access_token(scope)
         described_class.reset!
 
-        travel_to(2.hours.from_now) { described_class.oauth.access_token }
+        travel_to(2.hours.from_now) { described_class.oauth.access_token(scope) }
 
         expect(a_request(:post, %r{/identity/v1/oauth2/token})).to have_been_made.twice
       end
 
       it 'uses a new config.refresh_token after reset!' do
-        oauth.access_token
+        oauth.access_token(scope)
         described_class.config.refresh_token = 'new_refresh_token'
         described_class.reset!
 
-        described_class.oauth.access_token
+        described_class.oauth.access_token(scope)
 
         token_request = a_request(:post, %r{/identity/v1/oauth2/token})
         expect(token_request.with(body: hash_including('refresh_token' => 'new_refresh_token'))).to have_been_made.once
@@ -169,7 +173,7 @@ RSpec.describe EbaySellerApi do
         described_class.reset!
 
         expect do
-          oauth.access_token
+          oauth.access_token(scope)
         end.to raise_error(ArgumentError, 'refresh_token is required to request an access token')
       end
     end
@@ -222,6 +226,8 @@ RSpec.describe EbaySellerApi do
       described_class.orders.get_orders
 
       expect(api_request.with(headers: { 'Authorization' => 'Bearer new' })).to have_been_made.once
+      expect(a_request(:post, %r{/identity/v1/oauth2/token})
+        .with(body: hash_including('scope' => EbaySellerApi::Resources::SELL_FULFILLMENT))).to have_been_made.twice
     end
 
     it 'raises a status-based error when an error body is invalid JSON' do
@@ -255,7 +261,7 @@ RSpec.describe EbaySellerApi do
         body: { 'access_token' => 'secret_access', 'refresh_token' => 'secret_refresh', 'expires_in' => 7200 }.to_json
       )
 
-      described_class.oauth.refresh_user_access_token
+      described_class.oauth.refresh_user_access_token(EbaySellerApi::Resources::SELL_INVENTORY)
 
       expect(output.string).to include('"refresh_token" => "[FILTERED]"', '"access_token" => "[FILTERED]"')
       expect(output.string).not_to include('test_refresh_token', 'secret_access', 'secret_refresh')
@@ -276,7 +282,7 @@ RSpec.describe EbaySellerApi do
         headers: { 'Location' => 'https://api.sandbox.ebay.com/sell/feed/v1/task/task-1' }
       )
 
-      described_class.tasks.create_task({ feedType: 'LMS_ADD_FIXED_PRICE_ITEM' })
+      inventory_tasks.create_task({ feedType: 'LMS_ADD_FIXED_PRICE_ITEM' })
 
       expect(output.string).to include('Response Headers:', 'https://api.sandbox.ebay.com/sell/feed/v1/task/task-1')
     end
@@ -287,10 +293,93 @@ RSpec.describe EbaySellerApi do
         body: ebay_result_file
       )
 
-      described_class.tasks.get_result_file('task-1')
+      inventory_tasks.get_result_file('task-1')
 
       expect(output.string).to include('Response Body: [binary 700 bytes]')
       expect(output.string).not_to include('VerifyAddFixedPriceItemRequest')
+    end
+  end
+
+  describe 'OAuth scopes' do
+    let(:inventory) { EbaySellerApi::Resources::SELL_INVENTORY }
+    let(:fulfillment) { EbaySellerApi::Resources::SELL_FULFILLMENT }
+    let(:xml_file) do
+      Tempfile.new(['feed', '.xml']).tap do |tempfile|
+        tempfile.write('<BulkDataExchangeRequests/>')
+        tempfile.close
+      end
+    end
+
+    before do
+      stub_request(:any, %r{/sell/}).to_return(
+        status: 202,
+        headers: { 'Location' => 'https://api.sandbox.ebay.com/sell/feed/v1/task/task-1' }
+      )
+    end
+
+    after { xml_file.unlink }
+
+    def refreshed_scopes
+      requests = WebMock::RequestRegistry.instance.requested_signatures.hash.flat_map { |request, count| [request] * count }
+      requests.select { |request| request.uri.path.end_with?('/oauth2/token') }
+              .map { |request| URI.decode_www_form(request.body).to_h['scope'] }
+    end
+
+    def bearer_tokens_for(path)
+      requests = WebMock::RequestRegistry.instance.requested_signatures.hash.keys
+      requests.select { |request| request.uri.path.include?(path) }.map { |request| request.headers['Authorization'] }
+    end
+
+    it 'refreshes only sell.inventory for listing feeds' do
+      described_class.listings.submit_feed(xml_file.path, 'LMS_ADD_FIXED_PRICE_ITEM')
+      described_class.listings.get_listing_status('task-1')
+
+      expect(refreshed_scopes).to eq([inventory])
+    end
+
+    it 'refreshes only sell.fulfillment for orders and order feeds' do
+      described_class.orders.get_orders
+      described_class.orders.create_order_report_task
+      described_class.orders.submit_order_acknowledgement(xml_file.path)
+
+      expect(refreshed_scopes).to eq([fulfillment])
+    end
+
+    it 'keeps one access token per scope and sends the matching one with each request' do
+      stub_request(:post, %r{/identity/v1/oauth2/token}).to_return do |request|
+        scope = URI.decode_www_form(request.body).to_h['scope']
+        { status: 200, headers: { 'Content-Type' => 'application/json' },
+          body: { 'access_token' => "token for #{scope.split('.').last}", 'expires_in' => 7200 }.to_json }
+      end
+
+      described_class.listings.get_listing_status('task-1')
+      described_class.orders.get_orders
+      described_class.listings.get_listing_status('task-1')
+
+      expect(bearer_tokens_for('/sell/feed/v1/task/')).to eq(['Bearer token for inventory'])
+      expect(bearer_tokens_for('/sell/fulfillment/v1/order')).to eq(['Bearer token for fulfillment'])
+    end
+
+    it 'refreshes only the expired scope' do
+      described_class.listings.get_listing_status('task-1')
+      described_class.orders.get_orders
+
+      travel_to(2.hours.from_now) { described_class.orders.get_orders }
+
+      expect(refreshed_scopes).to contain_exactly(inventory, fulfillment, fulfillment)
+    end
+
+    it 'uses the fixed scope for order and inventory tasks' do
+      described_class.tasks.get_order_tasks
+      described_class.tasks.get_inventory_tasks
+
+      expect(refreshed_scopes).to eq([fulfillment, inventory])
+    end
+
+    it 'requires a scope for task and schedule calls' do
+      expect { described_class.tasks.get_tasks }
+        .to raise_error(ArgumentError, 'An OAuth scope is required for GET /sell/feed/v1/task')
+      expect(refreshed_scopes).to be_empty
     end
   end
 
@@ -663,7 +752,7 @@ RSpec.describe EbaySellerApi do
   end
 
   describe '.tasks' do
-    let(:tasks) { described_class.tasks }
+    let(:tasks) { inventory_tasks }
     let(:feed) { 'https://api.sandbox.ebay.com/sell/feed/v1' }
 
     it 'returns a tasks resource' do

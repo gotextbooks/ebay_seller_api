@@ -46,12 +46,15 @@ module EbaySellerApi
     def make_request(method, path, options = {})
       return send_request(method, path, options, nil) if options[:form]
 
-      access_token = oauth.access_token
+      scope = options[:scope]
+      raise ArgumentError, "An OAuth scope is required for #{method.upcase} #{path}" if scope.blank?
+
+      access_token = oauth.access_token(scope)
       begin
         send_request(method, path, options, access_token)
       rescue ApiError::InvalidAccessToken
-        oauth.refresh_user_access_token
-        send_request(method, path, options, oauth.access_token)
+        oauth.refresh_user_access_token(scope)
+        send_request(method, path, options, oauth.access_token(scope))
       end
     end
 
