@@ -5,13 +5,11 @@ module EbaySellerApi
     include Dry::Configurable
 
     ENVIRONMENTS = %i[sandbox production].freeze
-    DEFAULT_SCOPE = ['https://api.ebay.com/oauth/api_scope'].freeze
 
     setting :client_id
     setting :client_secret
     setting :ru_name
     setting :environment, default: :sandbox
-    setting :scope, default: DEFAULT_SCOPE
     setting :refresh_token
     setting :marketplace_id, default: 'EBAY_US'
     setting :content_language, default: 'en-US'

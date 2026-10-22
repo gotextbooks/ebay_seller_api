@@ -40,7 +40,7 @@ module EbaySellerApi
       end
 
       def feed_tasks
-        @feed_tasks ||= Tasks.new(client)
+        @feed_tasks ||= Tasks.new(client, scope:)
       end
 
       def feed_file(file_path)

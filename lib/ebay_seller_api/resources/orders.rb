@@ -6,6 +6,7 @@ module EbaySellerApi
       include FeedUpload
 
       BASE_PATH = '/sell/fulfillment/v1'
+      SCOPE = SELL_FULFILLMENT
       ORDER_REPORT_FEED_TYPE = 'LMS_ORDER_REPORT'
       ORDER_ACK_FEED_TYPE = 'LMS_ORDER_ACK'
 

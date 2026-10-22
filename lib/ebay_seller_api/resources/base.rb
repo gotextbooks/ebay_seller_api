@@ -2,11 +2,17 @@
 
 module EbaySellerApi
   module Resources
-    class Base
-      attr_reader :client
+    API_SCOPE = 'https://api.ebay.com/oauth/api_scope'
+    SELL_INVENTORY = 'https://api.ebay.com/oauth/api_scope/sell.inventory'
+    SELL_FULFILLMENT = 'https://api.ebay.com/oauth/api_scope/sell.fulfillment'
+    CONSENT_SCOPES = [API_SCOPE, SELL_INVENTORY, SELL_FULFILLMENT].freeze
 
-      def initialize(client)
+    class Base
+      attr_reader :client, :scope
+
+      def initialize(client, scope: self.class::SCOPE)
         @client = client
+        @scope = scope
       end
 
       def base_path
@@ -38,7 +44,7 @@ module EbaySellerApi
       private
 
       def request(method, path, options)
-        client.public_send(method, "#{base_path}#{path}", options)
+        client.public_send(method, "#{base_path}#{path}", options.reverse_merge(scope:))
       end
     end
   end

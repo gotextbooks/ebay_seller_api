@@ -2,10 +2,8 @@
 
 module EbaySellerApi
   class OAuth2
-    attr_reader :configuration, :scope
+    attr_reader :configuration
 
-    # Tokens outlive clients, so a new client after EbaySellerApi.reset! reuses a still-valid access token instead of
-    # requesting a new one. Keyed by environment, client ID, refresh token and scope; one per process.
     def self.tokens
       @tokens ||= {}
     end
@@ -13,14 +11,11 @@ module EbaySellerApi
     def initialize(client, configuration = client.configuration)
       @client = client
       @configuration = configuration
-      @scope = Array(configuration.scope)
-      refresh_token = configuration.refresh_token
-      return if refresh_token.blank?
-
-      @auth_token = self.class.tokens[token_key(refresh_token)] || build_token({ 'refresh_token' => refresh_token })
+      @refresh_token = configuration.refresh_token
     end
 
-    def generate_auth_url(ru_name: configuration.ru_name, scope: self.scope, state: '')
+    def generate_auth_url(scope: Resources::CONSENT_SCOPES, state: '')
+      ru_name = configuration.ru_name
       raise ArgumentError, 'RuName is required.' if ru_name.blank?
 
       [
@@ -33,11 +28,12 @@ module EbaySellerApi
       ].join
     end
 
-    def access_token
-      return @auth_token.access_token if @auth_token&.usable?
-      raise ArgumentError, 'refresh_token is required to request an access token' if @auth_token&.refresh_token.blank?
+    def access_token(scope)
+      token = self.class.tokens[token_key(scope)]
+      return token.access_token if token&.usable?
+      raise ArgumentError, 'refresh_token is required to request an access token' if @refresh_token.blank?
 
-      refresh_user_access_token['access_token']
+      refresh_user_access_token(scope)['access_token']
     end
 
     def get_token(code, ru_name = configuration.ru_name)
@@ -50,25 +46,22 @@ module EbaySellerApi
       token
     end
 
-    def refresh_user_access_token
-      if @auth_token&.refresh_token.blank?
-        raise Error, 'Failed to refresh the user access token. Token or refresh_token is not set.'
-      end
+    def refresh_user_access_token(scope)
+      raise Error, 'Failed to refresh the user access token. refresh_token is not set.' if @refresh_token.blank?
 
-      token = request_token(grant_type: 'refresh_token', refresh_token: @auth_token.refresh_token,
-                            scope: scope.join(' '))
-      @auth_token.to_h.merge(token).tap { |refreshed| self.credentials = refreshed }
+      request_token(grant_type: 'refresh_token', refresh_token: @refresh_token, scope: Array(scope).join(' '))
+        .tap { |token| self.class.tokens[token_key(scope)] = build_token(token) }
     end
 
     def credentials=(token)
-      @auth_token = build_token(token)
-      self.class.tokens[token_key(@auth_token.refresh_token)] = @auth_token if @auth_token.refresh_token.present?
+      refresh_token = token.to_h.stringify_keys['refresh_token']
+      @refresh_token = refresh_token if refresh_token.present?
     end
 
     private
 
-    def token_key(refresh_token)
-      [configuration.environment, configuration.client_id, refresh_token, scope]
+    def token_key(scope)
+      [configuration.environment, configuration.client_id, @refresh_token, Array(scope).sort]
     end
 
     def request_token(params)

@@ -5,6 +5,8 @@ module EbaySellerApi
     class Listings < Base
       include FeedUpload
 
+      SCOPE = SELL_INVENTORY
+
       # can be used for both submitting listing and revising inventory status (quantity, price)
       def submit_feed(file_path, feed_type)
         upload_feed(file_path, feed_type, client.configuration.listing_schema_version)

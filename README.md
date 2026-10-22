@@ -7,7 +7,7 @@ A Ruby SDK for eBay's Sell APIs: bulk listing uploads as XML feeds, orders, orde
 - **Authentication**: OAuth2 consent flow and automatic access token refresh
 - **Listings**: Submit LMS XML listing feeds (add, revise, verify) and download their results
 - **Orders**: Get orders, request order reports and send order acknowledgements
-- **Feed tasks**: Create tasks, upload files, check status and download results
+- **Feed tasks**: Get and create order and inventory tasks
 - **Error handling**: Exception classes for eBay's error responses
 - **Logging**: Request/response logging with tokens filtered out
 
@@ -34,10 +34,6 @@ EbaySellerApi.configure do |config|
   config.ru_name = "your_ru_name"           # for the consent flow
   config.refresh_token = "seller_refresh_token"
   config.environment = :sandbox             # or :production
-  config.scope = %w[
-    https://api.ebay.com/oauth/api_scope/sell.inventory
-    https://api.ebay.com/oauth/api_scope/sell.fulfillment
-  ]
   config.logger = Rails.logger              # Optional
 end
 ```
@@ -56,8 +52,8 @@ tokens = EbaySellerApi.oauth.obtain_token(params[:code])
 tokens["refresh_token"] # store it and set config.refresh_token
 ```
 
-The gem exchanges the refresh token for an access token on the first call, keeps it in memory and refreshes it when
-it expires.
+The consent page asks for every scope the gem needs, so there is no scope to configure. Each request uses an access
+token with only its own scope (`sell.inventory` for listings, `sell.fulfillment` for orders), refreshed when it expires.
 
 ## Usage
 
@@ -102,15 +98,11 @@ EbaySellerApi.orders.submit_order_acknowledgement("/path/to/OrderAck.xml")
 ### Feed Tasks
 
 ```ruby
-# List tasks
-tasks = EbaySellerApi.tasks.get_tasks(feed_type: "LMS_ADD_FIXED_PRICE_ITEM", look_back_days: 7)
-
-# Get a task
-task = EbaySellerApi.tasks.get_task("task-1")
-
-# Download a task's raw result file (zip)
-zip = EbaySellerApi.tasks.get_result_file("task-1").body
+EbaySellerApi.tasks.get_order_tasks(feed_type: "LMS_ORDER_REPORT")
+EbaySellerApi.tasks.get_inventory_task("task-1")
 ```
+
+Listing and order feed tasks go through `EbaySellerApi.listings` and `EbaySellerApi.orders`.
 
 ## Error Handling
 
