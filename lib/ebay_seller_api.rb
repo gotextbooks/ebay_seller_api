@@ -9,6 +9,7 @@ require 'dry-configurable'
 
 require_relative 'ebay_seller_api/version'
 require_relative 'ebay_seller_api/configuration'
+require_relative 'ebay_seller_api/oauth_scopes'
 require_relative 'ebay_seller_api/errors'
 require_relative 'ebay_seller_api/token'
 require_relative 'ebay_seller_api/oauth2'

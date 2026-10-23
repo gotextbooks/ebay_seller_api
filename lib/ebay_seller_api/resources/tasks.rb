@@ -7,27 +7,27 @@ module EbaySellerApi
       SCOPE = nil
 
       def get_order_tasks(params = {})
-        get('/order_task', query: params, scope: SELL_FULFILLMENT)
+        get('/order_task', query: params, scope: OAuthScopes::SELL_FULFILLMENT)
       end
 
       def create_order_task(data)
-        post('/order_task', data, scope: SELL_FULFILLMENT)
+        post('/order_task', data, scope: OAuthScopes::SELL_FULFILLMENT)
       end
 
       def get_order_task(task_id)
-        get("/order_task/#{segment(task_id)}", scope: SELL_FULFILLMENT)
+        get("/order_task/#{segment(task_id)}", scope: OAuthScopes::SELL_FULFILLMENT)
       end
 
       def get_inventory_tasks(params = {})
-        get('/inventory_task', query: params, scope: SELL_INVENTORY)
+        get('/inventory_task', query: params, scope: OAuthScopes::SELL_INVENTORY)
       end
 
       def create_inventory_task(data)
-        post('/inventory_task', data, scope: SELL_INVENTORY)
+        post('/inventory_task', data, scope: OAuthScopes::SELL_INVENTORY)
       end
 
       def get_inventory_task(task_id)
-        get("/inventory_task/#{segment(task_id)}", scope: SELL_INVENTORY)
+        get("/inventory_task/#{segment(task_id)}", scope: OAuthScopes::SELL_INVENTORY)
       end
 
       def get_schedules(params = {})

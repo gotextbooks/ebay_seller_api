@@ -49,15 +49,12 @@ Send the seller to eBay's consent page, then exchange the code eBay redirects ba
 
 ```ruby
 url = EbaySellerApi.oauth.generate_auth_url(state: "csrf_token")
-# Also ask for the scopes of the Notification topics we will subscribe to (read from eBay's getTopic)
-url = EbaySellerApi.oauth.generate_auth_url(topics: ['ORDER_CONFIRMATION'], state: "csrf_token")
 tokens = EbaySellerApi.oauth.obtain_token(params[:code])
 tokens["refresh_token"] # store it and set config.refresh_token
 ```
 
-The consent page asks for every scope the gem's resources need (`CONSENT_SCOPES`), plus the `authorizationScopes`
-of each topic passed in `topics:`, so there is no scope to configure. Every scope must also be listed under your app's
-OAuth scopes in the eBay Developer Portal. Each request uses an access
+The consent page asks for every scope the gem needs (`OAuthScopes::CONSENT`), so there is no scope to configure. Every
+scope must also be listed under your app's OAuth scopes in the eBay Developer Portal. Each request uses an access
 token with only its own scope (`sell.inventory` for listings, `sell.fulfillment` for orders), refreshed when it expires.
 
 Some endpoints act for the application rather than the seller, such as the Notification API's config, destinations 
@@ -110,9 +107,9 @@ eBay pushes notifications, such as 'ORDER_CONFIRMATION', to an HTTPS endpoint th
 Config, destination, topic and public key calls use the application access token. Subscription calls use the seller's 
 token, which needs the `commerce.notification.subscription` scope.
 
-`create_subscription` first calls `get_topic` for the `topicId` and adds the topic's `authorizationScopes` to that
-token. For example, `ORDER_CONFIRMATION` also needs `sell.fulfillment` and `sell.fulfillment.readonly`. The seller must
-have granted these scopes, so pass the topic to `generate_auth_url(topics: [...])` before they consent.
+`create_subscription` adds the topic's scopes from `OAuthScopes::TOPICS` to that token. For example,
+`ORDER_CONFIRMATION` also needs `sell.fulfillment` and `sell.fulfillment.readonly`. A topic missing from
+`OAuthScopes::TOPICS` raises `ArgumentError`; add it there, and its scopes to `OAuthScopes::CONSENT`.
 
 `Create`, `update` and `test` calls return an empty body. `Create` calls return the new ID in the `location` header;
 then `EbaySellerApi::Resources::Notifications.created_id(response` reads it.
