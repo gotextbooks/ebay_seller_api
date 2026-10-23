@@ -73,7 +73,8 @@ RSpec.describe EbaySellerApi do
           'https://auth.sandbox.ebay.com/oauth2/authorize?client_id=test_client_id&redirect_uri=test_ru_name' \
           '&response_type=code&state=xyz%20state&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory' \
-          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment'
+          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment' \
+          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fcommerce.notification.subscription'
         )
       end
     end
@@ -869,10 +870,10 @@ RSpec.describe EbaySellerApi do
       )
 
       expect(body).to eq(
-                        'topicId' => 'ORDER_CONFIRMATION',
-                        'destinationId' => 'destination-1',
-                        'status' => 'ENABLED',
-                        'payload' => { 'format' => 'JSON', 'schemaVersion' => '1.0', 'deliveryProtocol' => 'HTTPS' }
+        'topicId' => 'ORDER_CONFIRMATION',
+        'destinationId' => 'destination-1',
+        'status' => 'ENABLED',
+        'payload' => { 'format' => 'JSON', 'schemaVersion' => '1.0', 'deliveryProtocol' => 'HTTPS' }
                       )
     end
 

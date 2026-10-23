@@ -4,6 +4,7 @@ module EbaySellerApi
   module Resources
     class Notifications < Base
       BASE_PATH = '/commerce/notification/v1'
+      SCOPE = NOTIFICATION_SUBSCRIPTION
 
       def self.created_id(response)
         response.headers['location'].to_s.split('/').last.presence

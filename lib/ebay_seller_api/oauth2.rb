@@ -57,7 +57,7 @@ module EbaySellerApi
       token = self.class.tokens[application_token_key] unless refresh
       return token.access_token if token&.usable?
 
-      data = request_token(grant_type: 'client_credentials', scope: Configuration::DEFAULT_SCOPE.join(' '))
+      data = request_token(grant_type: 'client_credentials', scope: Resources::API_SCOPE)
       self.class.tokens[application_token_key] = build_token(data)
       data['access_token']
     end
