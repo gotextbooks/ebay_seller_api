@@ -24,8 +24,14 @@ module EbaySellerApi
         get("/destination/#{segment(destination_id)}", **app_token_params)
       end
 
+      def get_topic(topic_id)
+        require_id!(:topic_id, topic_id)
+
+        get("/topic/#{segment(topic_id)}", **app_token_params)
+      end
+
       def create_subscription(data)
-        post('/subscription', data)
+        post('/subscription', data, scope: subscription_scopes(data))
       end
 
       def get_subscription(subscription_id)
@@ -50,6 +56,13 @@ module EbaySellerApi
 
       def app_token_params
         { application_token: true }
+      end
+
+      def subscription_scopes(data)
+        topic_id = data.with_indifferent_access[:topicId]
+        topic_scopes = get_topic(topic_id).body['authorizationScopes']
+
+        [scope, *topic_scopes].uniq
       end
 
       def require_id!(name, id)

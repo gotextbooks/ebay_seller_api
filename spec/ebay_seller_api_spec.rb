@@ -74,6 +74,7 @@ RSpec.describe EbaySellerApi do
           '&response_type=code&state=xyz%20state&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment' \
+          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment.readonly' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fcommerce.notification.subscription'
         )
       end
@@ -806,6 +807,10 @@ RSpec.describe EbaySellerApi do
   describe '.notifications' do
     let(:notifications) { described_class.notifications }
     let(:notification) { 'https://api.sandbox.ebay.com/commerce/notification/v1' }
+    let(:order_confirmation_scopes) do
+      [EbaySellerApi::Resources::NOTIFICATION_SUBSCRIPTION, EbaySellerApi::Resources::SELL_FULFILLMENT,
+       EbaySellerApi::Resources::SELL_FULFILLMENT_READONLY]
+    end
 
     before do
       stub_request(:post, %r{/identity/v1/oauth2/token})
@@ -815,6 +820,11 @@ RSpec.describe EbaySellerApi do
           headers: { 'Content-Type' => 'application/json' },
           body: { 'access_token' => 'application_access_token', 'expires_in' => 7200 }.to_json
         )
+      stub_request(:get, "#{notification}/topic/ORDER_CONFIRMATION").to_return(
+        status: 200,
+        headers: { 'Content-Type' => 'application/json' },
+        body: { 'topicId' => 'ORDER_CONFIRMATION', 'authorizationScopes' => order_confirmation_scopes }.to_json
+      )
     end
 
     it 'returns a notifications resource' do
@@ -825,12 +835,13 @@ RSpec.describe EbaySellerApi do
       [:update_config, :put, '/config'] => [{ alertEmail: 'alerts@example.com' }],
       [:create_destination, :post, '/destination'] => [{ name: 'willamette' }],
       [:get_destination, :get, '/destination/destination-1'] => ['destination-1'],
+      [:get_topic, :get, '/topic/ORDER_CONFIRMATION'] => ['ORDER_CONFIRMATION'],
       [:get_public_key, :get, '/public_key/key-1'] => ['key-1']
     }.each do |(method_name, verb, path), arguments|
       describe "##{method_name}" do
         it "sends #{verb.upcase} #{path} with the application access token" do
           api_request = stub_request(verb, "#{notification}#{path}")
-                          .with(headers: { 'Authorization' => 'Bearer application_access_token' })
+                        .with(headers: { 'Authorization' => 'Bearer application_access_token' })
 
           notifications.public_send(method_name, *arguments)
 
@@ -847,7 +858,7 @@ RSpec.describe EbaySellerApi do
       describe "##{method_name}" do
         it "sends #{verb.upcase} #{path} with the user access token" do
           api_request = stub_request(verb, "#{notification}#{path}")
-                          .with(headers: { 'Authorization' => 'Bearer access_token' })
+                        .with(headers: { 'Authorization' => 'Bearer access_token' })
 
           notifications.public_send(method_name, *arguments)
 
@@ -874,7 +885,44 @@ RSpec.describe EbaySellerApi do
         'destinationId' => 'destination-1',
         'status' => 'ENABLED',
         'payload' => { 'format' => 'JSON', 'schemaVersion' => '1.0', 'deliveryProtocol' => 'HTTPS' }
-                      )
+      )
+    end
+
+    describe '#create_subscription scopes' do
+      def user_token_request(scopes)
+        a_request(:post, %r{/identity/v1/oauth2/token})
+          .with(body: hash_including('grant_type' => 'refresh_token', 'scope' => scopes.join(' ')))
+      end
+
+      before { stub_request(:post, "#{notification}/subscription") }
+
+      it "requests one user access token covering the subscription and the topic's authorizationScopes" do
+        notifications.create_subscription(topicId: 'ORDER_CONFIRMATION')
+
+        expect(user_token_request(order_confirmation_scopes)).to have_been_made.once
+      end
+
+      it 'reads the topicId from string keys too' do
+        notifications.create_subscription('topicId' => 'ORDER_CONFIRMATION')
+
+        expect(user_token_request(order_confirmation_scopes)).to have_been_made.once
+      end
+
+      it 'uses only the subscription scope when the topic lists no authorizationScopes' do
+        stub_request(:get, "#{notification}/topic/MARKETPLACE_ACCOUNT_DELETION")
+          .to_return(status: 200, headers: { 'Content-Type' => 'application/json' },
+                     body: { 'topicId' => 'MARKETPLACE_ACCOUNT_DELETION' }.to_json)
+
+        notifications.create_subscription(topicId: 'MARKETPLACE_ACCOUNT_DELETION')
+
+        expect(user_token_request([EbaySellerApi::Resources::NOTIFICATION_SUBSCRIPTION])).to have_been_made.once
+      end
+
+      it 'requires the topicId' do
+        expect do
+          notifications.create_subscription(destinationId: 'destination-1')
+        end.to raise_error(ArgumentError, 'Missing required argument: topic_id')
+      end
     end
 
     it 'requests a new application access token and retries once when eBay rejects it' do
@@ -894,7 +942,7 @@ RSpec.describe EbaySellerApi do
           body: { 'errors' => [{ 'errorId' => 1001, 'message' => 'Invalid access token' }] }.to_json
         )
       api_request = stub_request(:get, "#{notification}/public_key/key-1")
-                      .with(headers: { 'Authorization' => 'Bearer new' })
+                    .with(headers: { 'Authorization' => 'Bearer new' })
 
       notifications.get_public_key('key-1')
 
@@ -903,6 +951,7 @@ RSpec.describe EbaySellerApi do
 
     {
       get_destination: :destination_id,
+      get_topic: :topic_id,
       get_subscription: :subscription_id,
       test_subscription: :subscription_id,
       get_public_key: :public_key_id

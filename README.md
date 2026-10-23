@@ -103,8 +103,12 @@ EbaySellerApi.orders.submit_order_acknowledgement("/path/to/OrderAck.xml")
 
 ### Notifications
 eBay pushes notifications, such as 'ORDER_CONFIRMATION', to an HTTPS endpoint that we registered as a destination.
-Config, destination, and public key calls use the application access token. Subscription calls use the seller's 
+Config, destination, topic and public key calls use the application access token. Subscription calls use the seller's 
 token, which needs the `commerce.notification.subscription` scope.
+
+`create_subscription` first calls `get_topic` for the `topicId` and adds the topic's `authorizationScopes` to that
+token. For example, `ORDER_CONFIRMATION` also needs `sell.fulfillment` and `sell.fulfillment.readonly`. The seller must
+have granted these scopes on the consent page (`CONSENT_SCOPES`).
 
 `Create`, `update` and `test` calls return an empty body. `Create` calls return the new ID in the `location` header;
 then `EbaySellerApi::Resources::Notifications.created_id(response` reads it.
@@ -126,6 +130,9 @@ response = notifications.create_destination({
                                               }
                                             })
 destination_id = EbaySellerApi::Resources::Notifications.created_id(response)
+
+# See a topic's details, including the authorizationScopes needed to subscribe to it
+notifications.get_topic('ORDER_CONFIRMATION')
 
 # Subscribe the destination to a topic
 response = notifications.create_subscription({
