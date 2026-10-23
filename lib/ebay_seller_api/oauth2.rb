@@ -14,7 +14,7 @@ module EbaySellerApi
       @refresh_token = configuration.refresh_token
     end
 
-    def generate_auth_url(scope: Resources::CONSENT_SCOPES, state: '')
+    def generate_auth_url(scope: Resources::CONSENT_SCOPES, topics: [], state: '')
       ru_name = configuration.ru_name
       raise ArgumentError, 'RuName is required.' if ru_name.blank?
 
@@ -24,7 +24,7 @@ module EbaySellerApi
         '&redirect_uri=', encode(ru_name),
         '&response_type=code',
         '&state=', encode(state),
-        '&scope=', encode(Array(scope).join(' '))
+        '&scope=', encode(consent_scopes(scope, topics).join(' '))
       ].join
     end
 
@@ -53,6 +53,15 @@ module EbaySellerApi
         .tap { |token| self.class.tokens[token_key(scope)] = build_token(token) }
     end
 
+    def application_access_token(refresh: false)
+      token = self.class.tokens[application_token_key] unless refresh
+      return token.access_token if token&.usable?
+
+      data = request_token(grant_type: 'client_credentials', scope: Resources::API_SCOPE)
+      self.class.tokens[application_token_key] = build_token(data)
+      data['access_token']
+    end
+
     def credentials=(token)
       refresh_token = token.to_h.stringify_keys['refresh_token']
       @refresh_token = refresh_token if refresh_token.present?
@@ -60,8 +69,19 @@ module EbaySellerApi
 
     private
 
+    def consent_scopes(scope, topics)
+      notifications = Resources::Notifications.new(@client)
+      topic_scopes = Array(topics).flat_map { |topic_id| notifications.get_topic(topic_id).body['authorizationScopes'] }
+
+      [*Array(scope), *topic_scopes].compact.uniq
+    end
+
     def token_key(scope)
       [configuration.environment, configuration.client_id, @refresh_token, Array(scope).sort]
+    end
+
+    def application_token_key
+      [configuration.environment, configuration.client_id, :application]
     end
 
     def request_token(params)
