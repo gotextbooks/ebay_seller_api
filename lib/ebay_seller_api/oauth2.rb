@@ -14,7 +14,7 @@ module EbaySellerApi
       @refresh_token = configuration.refresh_token
     end
 
-    def generate_auth_url(scope: Resources::CONSENT_SCOPES, topics: [], state: '')
+    def generate_auth_url(scope: Resources::CONSENT_SCOPES, state: '')
       ru_name = configuration.ru_name
       raise ArgumentError, 'RuName is required.' if ru_name.blank?
 
@@ -24,7 +24,7 @@ module EbaySellerApi
         '&redirect_uri=', encode(ru_name),
         '&response_type=code',
         '&state=', encode(state),
-        '&scope=', encode(consent_scopes(scope, topics).join(' '))
+        '&scope=', encode(Array(scope).join(' '))
       ].join
     end
 
@@ -68,13 +68,6 @@ module EbaySellerApi
     end
 
     private
-
-    def consent_scopes(scope, topics)
-      notifications = Resources::Notifications.new(@client)
-      topic_scopes = Array(topics).flat_map { |topic_id| notifications.get_topic(topic_id).body['authorizationScopes'] }
-
-      [*Array(scope), *topic_scopes].compact.uniq
-    end
 
     def token_key(scope)
       [configuration.environment, configuration.client_id, @refresh_token, Array(scope).sort]

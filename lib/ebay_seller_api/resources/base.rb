@@ -5,8 +5,11 @@ module EbaySellerApi
     API_SCOPE = 'https://api.ebay.com/oauth/api_scope'
     SELL_INVENTORY = 'https://api.ebay.com/oauth/api_scope/sell.inventory'
     SELL_FULFILLMENT = 'https://api.ebay.com/oauth/api_scope/sell.fulfillment'
+    SELL_FULFILLMENT_READONLY = 'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly'
     NOTIFICATION_SUBSCRIPTION = 'https://api.ebay.com/oauth/api_scope/commerce.notification.subscription'
-    CONSENT_SCOPES = [API_SCOPE, SELL_INVENTORY, SELL_FULFILLMENT, NOTIFICATION_SUBSCRIPTION].freeze
+    CONSENT_SCOPES = [
+      API_SCOPE, SELL_INVENTORY, SELL_FULFILLMENT, SELL_FULFILLMENT_READONLY, NOTIFICATION_SUBSCRIPTION
+    ].freeze
 
     class Base
       attr_reader :client, :scope

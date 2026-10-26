@@ -66,25 +66,6 @@ RSpec.describe EbaySellerApi do
     let(:scope) { EbaySellerApi::Resources::SELL_INVENTORY }
 
     describe '#generate_auth_url' do
-      let(:readonly_scope) { 'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly' }
-      let!(:topic_request) do
-        stub_request(:get, 'https://api.sandbox.ebay.com/commerce/notification/v1/topic/ORDER_CONFIRMATION')
-          .with(headers: { 'Authorization' => 'Bearer access_token' })
-          .to_return(
-            status: 200,
-            headers: { 'Content-Type' => 'application/json' },
-            body: {
-              'topicId' => 'ORDER_CONFIRMATION',
-              'authorizationScopes' => [EbaySellerApi::Resources::NOTIFICATION_SUBSCRIPTION,
-                                        EbaySellerApi::Resources::SELL_FULFILLMENT, readonly_scope]
-            }.to_json
-          )
-      end
-
-      def url_scopes(url)
-        URI.decode_uri_component(url[/scope=(.*)\z/, 1]).split
-      end
-
       it "returns eBay's consent page URL asking for every scope the gem uses" do
         url = oauth.generate_auth_url(state: 'xyz state')
 
@@ -93,23 +74,9 @@ RSpec.describe EbaySellerApi do
           '&response_type=code&state=xyz%20state&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment' \
+          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment.readonly' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fcommerce.notification.subscription'
         )
-        expect(topic_request).not_to have_been_made
-      end
-
-      it "also asks for each topic's authorizationScopes, without duplicates" do
-        url = oauth.generate_auth_url(topics: ['ORDER_CONFIRMATION'])
-
-        expect(url_scopes(url)).to eq([*EbaySellerApi::Resources::CONSENT_SCOPES, readonly_scope])
-        expect(topic_request).to have_been_made.once
-      end
-
-      it 'adds the topic scopes to the scopes passed in place of CONSENT_SCOPES' do
-        url = oauth.generate_auth_url(scope: EbaySellerApi::Resources::API_SCOPE, topics: ['ORDER_CONFIRMATION'])
-
-        expect(url_scopes(url)).to eq([EbaySellerApi::Resources::API_SCOPE, EbaySellerApi::Resources::NOTIFICATION_SUBSCRIPTION,
-                                       EbaySellerApi::Resources::SELL_FULFILLMENT, readonly_scope])
       end
     end
 
@@ -842,7 +809,7 @@ RSpec.describe EbaySellerApi do
     let(:notification) { 'https://api.sandbox.ebay.com/commerce/notification/v1' }
     let(:order_confirmation_scopes) do
       [EbaySellerApi::Resources::NOTIFICATION_SUBSCRIPTION, EbaySellerApi::Resources::SELL_FULFILLMENT,
-       'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly']
+       EbaySellerApi::Resources::SELL_FULFILLMENT_READONLY]
     end
 
     before do
