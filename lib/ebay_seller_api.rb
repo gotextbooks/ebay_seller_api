@@ -19,6 +19,7 @@ require_relative 'ebay_seller_api/resources/feed_upload'
 require_relative 'ebay_seller_api/resources/listings'
 require_relative 'ebay_seller_api/resources/orders'
 require_relative 'ebay_seller_api/resources/tasks'
+require_relative 'ebay_seller_api/resources/notifications'
 
 module EbaySellerApi
   class << self
@@ -44,6 +45,10 @@ module EbaySellerApi
 
     def tasks
       @tasks ||= Resources::Tasks.new(client)
+    end
+
+    def notifications
+      @notifications ||= Resources::Notifications.new(client)
     end
 
     def reset!

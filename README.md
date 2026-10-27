@@ -1,6 +1,6 @@
 # eBay Seller API Ruby SDK
 
-A Ruby SDK for eBay's Sell APIs: bulk listing uploads as XML feeds, orders, order reports and Feed tasks.
+A Ruby SDK for eBay's Sell APIs: bulk listing uploads as XML feeds, orders, order reports and Feed tasks and notifications.
 
 ## Features
 
@@ -8,6 +8,7 @@ A Ruby SDK for eBay's Sell APIs: bulk listing uploads as XML feeds, orders, orde
 - **Listings**: Submit LMS XML listing feeds (add, revise, verify) and download their results
 - **Orders**: Get orders, request order reports and send order acknowledgements
 - **Feed tasks**: Get and create order and inventory tasks
+- **Notifications**: Subscribe to topics so eBay sends notifications to our registered endpoints
 - **Error handling**: Exception classes for eBay's error responses
 - **Logging**: Request/response logging with tokens filtered out
 
@@ -55,6 +56,11 @@ tokens["refresh_token"] # store it and set config.refresh_token
 The consent page asks for every scope the gem needs, so there is no scope to configure. Each request uses an access
 token with only its own scope (`sell.inventory` for listings, `sell.fulfillment` for orders), refreshed when it expires.
 
+Some endpoints act for the application rather than the seller, such as the Notification API's config, destinations 
+and public keys. For those, the gem requests an application access token (client credentials grant) with your 
+'client_id' and 'client_secret', keeps it in memory and requests a new one when it expires. It needs no refresh 
+token.
+
 ## Usage
 
 Every method returns the `Faraday::Response`, with JSON bodies parsed into a Hash.
@@ -94,6 +100,79 @@ report = EbaySellerApi.orders.get_order_report_result_file(task_id).body
 # Acknowledge orders with an OrderAck XML file (returns the task ID)
 EbaySellerApi.orders.submit_order_acknowledgement("/path/to/OrderAck.xml")
 ```
+
+### Notifications
+eBay pushes notifications, such as 'ORDER_CONFIRMATION', to an HTTPS endpoint that we registered as a destination.
+Config, destination, topic and public key calls use the application access token. Subscription calls use the seller's 
+token, which needs the `commerce.notification.subscription` scope.
+
+`create_subscription` first calls `get_topic` for the `topicId` and adds the topic's `authorizationScopes` to that
+token. For example, `ORDER_CONFIRMATION` also needs `sell.fulfillment` and `sell.fulfillment.readonly`. The seller must
+have granted these scopes on the consent page (`CONSENT_SCOPES`).
+
+`Create`, `update` and `test` calls return an empty body. `Create` calls return the new ID in the `location` header;
+then `EbaySellerApi::Resources::Notifications.created_id(response` reads it.
+
+```ruby
+notifications = EbaySellerApi.notifications
+
+# Set the email eBay sends Notification API alerts to
+notifications.update_config(alertEmail: 'test@example.com')
+
+# Register your endpoint. eBay calls it with a challenge_code that it must answer first.
+# The verificationToken is used to verify the request came from eBay. The passed verificationToken should be saved or cached to be used for the challenge_code verification.
+response = notifications.create_destination(
+  {
+    name: 'order-confirmation-destination',
+    status: 'ENABLED',
+    deliveryConfig: {
+      endpoint: "https://example.com/ebay-seller-api/notifications",
+      verificationToken: SecureRandom.uuid
+    }
+  }
+)
+destination_id = EbaySellerApi::Resources::Notifications.created_id(response)
+
+# See a topic's details, including the authorizationScopes needed to subscribe to it
+notifications.get_topic('ORDER_CONFIRMATION')
+
+# Subscribe the destination to a topic
+response = notifications.create_subscription(
+  {
+    topicId: 'ORDER_CONFIRMATION',
+    status: 'ENABLED',
+    destinationId: destination_id,
+    payload: {
+      format: 'JSON',
+      schemaVersion: '1.0',
+      deliveryProtocol: 'HTTPS'
+    }
+  }
+)
+subscription_id = EbaySellerApi::Resources::Notifications.created_id(response)
+
+# Check on them later
+notifications.get_subscription(subscription_id)
+notifications.get_destination(destination_id)
+
+# Ask eBay to send a test notification to the destination
+notifications.test_subscription(subscription_id)
+```
+
+Each notification has an `X-EBAY-SIGNATURE` header: Base64-encoded JSON with the ID of the key that signed it. Get 
+that key to verify the signature.
+
+```ruby
+signature = JSON.parse(request.headers['X-EBAY-SIGNATURE'].unpack1("m"))
+key = EbaySellerApi.notifications.get_public_key(signature["kid"]).body
+key["key"]       # the public key (PEM)
+key["algorithm"] # "ECDSA"
+key["digest"]    # "SHA1"
+```
+
+eBay asks you to cache the key, for about an hour, rather than fetch it for every notification.
+
+The ID arguments are required: `get_destination(nil)` raises `ArgumentError` before calling eBay.
 
 ### Feed Tasks
 

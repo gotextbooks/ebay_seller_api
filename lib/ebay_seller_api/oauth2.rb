@@ -53,6 +53,15 @@ module EbaySellerApi
         .tap { |token| self.class.tokens[token_key(scope)] = build_token(token) }
     end
 
+    def application_access_token(refresh: false)
+      token = self.class.tokens[application_token_key] unless refresh
+      return token.access_token if token&.usable?
+
+      data = request_token(grant_type: 'client_credentials', scope: Resources::API_SCOPE)
+      self.class.tokens[application_token_key] = build_token(data)
+      data['access_token']
+    end
+
     def credentials=(token)
       refresh_token = token.to_h.stringify_keys['refresh_token']
       @refresh_token = refresh_token if refresh_token.present?
@@ -62,6 +71,10 @@ module EbaySellerApi
 
     def token_key(scope)
       [configuration.environment, configuration.client_id, @refresh_token, Array(scope).sort]
+    end
+
+    def application_token_key
+      [configuration.environment, configuration.client_id, :application]
     end
 
     def request_token(params)
