@@ -121,30 +121,34 @@ notifications.update_config(alertEmail: 'test@example.com')
 
 # Register your endpoint. eBay calls it with a challenge_code that it must answer first.
 # The verificationToken is used to verify the request came from eBay. The passed verificationToken should be saved or cached to be used for the challenge_code verification.
-response = notifications.create_destination({
-                                              name: 'order-confirmation-destination',
-                                              status: 'ENABLED',
-                                              deliveryConfig: {
-                                                endpoint: "https://example.com/ebay-seller-api/notifications",
-                                                verificationToken: SecureRandom.uuid
-                                              }
-                                            })
+response = notifications.create_destination(
+  {
+    name: 'order-confirmation-destination',
+    status: 'ENABLED',
+    deliveryConfig: {
+      endpoint: "https://example.com/ebay-seller-api/notifications",
+      verificationToken: SecureRandom.uuid
+    }
+  }
+)
 destination_id = EbaySellerApi::Resources::Notifications.created_id(response)
 
 # See a topic's details, including the authorizationScopes needed to subscribe to it
 notifications.get_topic('ORDER_CONFIRMATION')
 
 # Subscribe the destination to a topic
-response = notifications.create_subscription({
-                                               topicId: 'ORDER_CONFIRMATION',
-                                               status: 'ENABLED',
-                                               destinationId: destination_id,
-                                               payload: {
-                                                 format: 'JSON',
-                                                 schemaVersion: '1.0',
-                                                 deliveryProtocol: 'HTTPS'
-                                               }
-                                             })
+response = notifications.create_subscription(
+  {
+    topicId: 'ORDER_CONFIRMATION',
+    status: 'ENABLED',
+    destinationId: destination_id,
+    payload: {
+      format: 'JSON',
+      schemaVersion: '1.0',
+      deliveryProtocol: 'HTTPS'
+    }
+  }
+)
 subscription_id = EbaySellerApi::Resources::Notifications.created_id(response)
 
 # Check on them later
