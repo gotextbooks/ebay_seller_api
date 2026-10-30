@@ -4,7 +4,6 @@ module EbaySellerApi
   module Resources
     class Notifications < Base
       BASE_PATH = '/commerce/notification/v1'
-      SCOPE = NOTIFICATION_SUBSCRIPTION
 
       def self.created_id(response)
         response.headers['location'].to_s.split('/').last.presence
@@ -31,7 +30,7 @@ module EbaySellerApi
       end
 
       def create_subscription(data)
-        post('/subscription', data, scope: subscription_scopes(data))
+        post('/subscription', data)
       end
 
       def get_subscription(subscription_id)
@@ -56,13 +55,6 @@ module EbaySellerApi
 
       def app_token_params
         { application_token: true }
-      end
-
-      def subscription_scopes(data)
-        topic_id = data.with_indifferent_access[:topicId]
-        topic_scopes = get_topic(topic_id).body['authorizationScopes']
-
-        [scope, *topic_scopes].uniq
       end
 
       def require_id!(name, id)

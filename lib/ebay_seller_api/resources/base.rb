@@ -2,21 +2,11 @@
 
 module EbaySellerApi
   module Resources
-    API_SCOPE = 'https://api.ebay.com/oauth/api_scope'
-    SELL_INVENTORY = 'https://api.ebay.com/oauth/api_scope/sell.inventory'
-    SELL_FULFILLMENT = 'https://api.ebay.com/oauth/api_scope/sell.fulfillment'
-    SELL_FULFILLMENT_READONLY = 'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly'
-    NOTIFICATION_SUBSCRIPTION = 'https://api.ebay.com/oauth/api_scope/commerce.notification.subscription'
-    CONSENT_SCOPES = [
-      API_SCOPE, SELL_INVENTORY, SELL_FULFILLMENT, SELL_FULFILLMENT_READONLY, NOTIFICATION_SUBSCRIPTION
-    ].freeze
-
     class Base
-      attr_reader :client, :scope
+      attr_reader :client
 
-      def initialize(client, scope: self.class::SCOPE)
+      def initialize(client)
         @client = client
-        @scope = scope
       end
 
       def base_path
@@ -48,7 +38,7 @@ module EbaySellerApi
       private
 
       def request(method, path, options)
-        client.public_send(method, "#{base_path}#{path}", options.reverse_merge(scope:))
+        client.public_send(method, "#{base_path}#{path}", options)
       end
     end
   end

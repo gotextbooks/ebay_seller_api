@@ -9,6 +9,7 @@ module EbaySellerApi
     setting :client_id
     setting :client_secret
     setting :ru_name
+    setting :scopes
     setting :environment, default: :sandbox
     setting :refresh_token
     setting :marketplace_id, default: 'EBAY_US'
