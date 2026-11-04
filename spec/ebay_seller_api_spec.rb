@@ -5,11 +5,24 @@ require 'logger'
 require 'tempfile'
 
 RSpec.describe EbaySellerApi do
+  def scopes
+    %w[
+      https://api.ebay.com/oauth/api_scope/sell.inventory
+      https://api.ebay.com/oauth/api_scope/sell.fulfillment
+      https://api.ebay.com/oauth/api_scope/commerce.notification.subscription
+    ]
+  end
+
+  def scope_param
+    scopes.join(' ')
+  end
+
   before do
     described_class.configure do |config|
       config.client_id = 'test_client_id'
       config.client_secret = 'test_client_secret'
       config.ru_name = 'test_ru_name'
+      config.scopes = scopes
       config.environment = :sandbox
       config.refresh_token = 'test_refresh_token'
       config.listing_schema_version = '1235'
@@ -40,7 +53,7 @@ RSpec.describe EbaySellerApi do
   end
 
   def inventory_tasks
-    EbaySellerApi::Resources::Tasks.new(EbaySellerApi::Client.new, scope: EbaySellerApi::Resources::SELL_INVENTORY)
+    EbaySellerApi::Resources::Tasks.new(EbaySellerApi::Client.new)
   end
 
   def ebay_result_file
@@ -59,24 +72,40 @@ RSpec.describe EbaySellerApi do
       expect(described_class.config.api_url).to eq('https://api.ebay.com')
       expect(described_class.config.authorize_endpoint).to eq('https://auth.ebay.com/oauth2/authorize')
     end
+
+    it 'does not require scopes' do
+      described_class.config.scopes = nil
+
+      expect { EbaySellerApi::Client.new }.not_to raise_error
+    end
   end
 
   describe '.oauth' do
     let(:oauth) { described_class.oauth }
-    let(:scope) { EbaySellerApi::Resources::SELL_INVENTORY }
 
     describe '#generate_auth_url' do
-      it "returns eBay's consent page URL asking for every scope the gem uses" do
+      it "returns eBay's consent page URL asking for the configured scopes" do
         url = oauth.generate_auth_url(state: 'xyz state')
 
         expect(url).to eq(
           'https://auth.sandbox.ebay.com/oauth2/authorize?client_id=test_client_id&redirect_uri=test_ru_name' \
-          '&response_type=code&state=xyz%20state&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope' \
-          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory' \
+          '&response_type=code&state=xyz%20state' \
+          '&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment' \
-          '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.fulfillment.readonly' \
           '%20https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fcommerce.notification.subscription'
         )
+      end
+
+      it 'asks for the given scopes instead' do
+        url = oauth.generate_auth_url(scope: 'https://api.ebay.com/oauth/api_scope/sell.inventory')
+
+        expect(url).to end_with('&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fsell.inventory')
+      end
+
+      it 'requires scopes' do
+        described_class.config.scopes = nil
+
+        expect { oauth.generate_auth_url }.to raise_error(ArgumentError, 'scopes is required.')
       end
     end
 
@@ -107,12 +136,13 @@ RSpec.describe EbaySellerApi do
         expect(tokens['refresh_token']).to eq('user_refresh_token')
       end
 
-      it 'refreshes with the obtained refresh token for the scope a request needs' do
+      it 'refreshes with the obtained refresh token for the configured scopes' do
         oauth.obtain_token('the_code')
-        oauth.access_token(scope)
+        oauth.access_token
 
         expect(a_request(:post, %r{/identity/v1/oauth2/token})
-          .with(body: { 'grant_type' => 'refresh_token', 'refresh_token' => 'user_refresh_token', 'scope' => scope }))
+          .with(body: { 'grant_type' => 'refresh_token', 'refresh_token' => 'user_refresh_token',
+                        'scope' => scope_param }))
           .to have_been_made.once
       end
     end
@@ -128,43 +158,44 @@ RSpec.describe EbaySellerApi do
           body: { 'access_token' => 'access_token', 'expires_in' => 7200 }.to_json
         )
 
-        expect(oauth.access_token(scope)).to eq('access_token')
+        expect(oauth.access_token).to eq('access_token')
 
         expect(token_request).to have_been_made.once
-        expect(form).to eq('grant_type' => 'refresh_token', 'refresh_token' => 'test_refresh_token', 'scope' => scope)
+        expect(form).to eq('grant_type' => 'refresh_token', 'refresh_token' => 'test_refresh_token',
+                           'scope' => scope_param)
       end
 
       it 'keeps the access token in memory until it expires' do
-        oauth.access_token(scope)
-        oauth.access_token(scope)
-        travel_to(2.hours.from_now - 59.seconds) { oauth.access_token(scope) }
+        oauth.access_token
+        oauth.access_token
+        travel_to(2.hours.from_now - 59.seconds) { oauth.access_token }
 
         expect(a_request(:post, %r{/identity/v1/oauth2/token})).to have_been_made.twice
       end
 
       it 'reuses a valid access token after reset!' do
-        oauth.access_token(scope)
+        oauth.access_token
         described_class.reset!
 
-        expect(described_class.oauth.access_token(scope)).to eq('access_token')
+        expect(described_class.oauth.access_token).to eq('access_token')
         expect(a_request(:post, %r{/identity/v1/oauth2/token})).to have_been_made.once
       end
 
       it 'refreshes after reset! once the access token has expired' do
-        oauth.access_token(scope)
+        oauth.access_token
         described_class.reset!
 
-        travel_to(2.hours.from_now) { described_class.oauth.access_token(scope) }
+        travel_to(2.hours.from_now) { described_class.oauth.access_token }
 
         expect(a_request(:post, %r{/identity/v1/oauth2/token})).to have_been_made.twice
       end
 
       it 'uses a new config.refresh_token after reset!' do
-        oauth.access_token(scope)
+        oauth.access_token
         described_class.config.refresh_token = 'new_refresh_token'
         described_class.reset!
 
-        described_class.oauth.access_token(scope)
+        described_class.oauth.access_token
 
         token_request = a_request(:post, %r{/identity/v1/oauth2/token})
         expect(token_request.with(body: hash_including('refresh_token' => 'new_refresh_token'))).to have_been_made.once
@@ -175,8 +206,17 @@ RSpec.describe EbaySellerApi do
         described_class.reset!
 
         expect do
-          oauth.access_token(scope)
+          oauth.access_token
         end.to raise_error(ArgumentError, 'refresh_token is required to request an access token')
+      end
+
+      it 'requires scopes before requesting a token' do
+        described_class.config.scopes = []
+
+        expect { oauth.access_token }.to raise_error(ArgumentError, 'scopes is required to request an access token')
+        expect { oauth.refresh_user_access_token }
+          .to raise_error(ArgumentError, 'scopes is required to request an access token')
+        expect(a_request(:post, %r{/identity/v1/oauth2/token})).not_to have_been_made
       end
     end
 
@@ -280,7 +320,7 @@ RSpec.describe EbaySellerApi do
 
       expect(api_request.with(headers: { 'Authorization' => 'Bearer new' })).to have_been_made.once
       expect(a_request(:post, %r{/identity/v1/oauth2/token})
-        .with(body: hash_including('scope' => EbaySellerApi::Resources::SELL_FULFILLMENT))).to have_been_made.twice
+        .with(body: hash_including('scope' => scope_param))).to have_been_made.twice
     end
 
     it 'raises a status-based error when an error body is invalid JSON' do
@@ -314,7 +354,7 @@ RSpec.describe EbaySellerApi do
         body: { 'access_token' => 'secret_access', 'refresh_token' => 'secret_refresh', 'expires_in' => 7200 }.to_json
       )
 
-      described_class.oauth.refresh_user_access_token(EbaySellerApi::Resources::SELL_INVENTORY)
+      described_class.oauth.refresh_user_access_token
 
       expect(output.string).to include('"refresh_token" => "[FILTERED]"', '"access_token" => "[FILTERED]"')
       expect(output.string).not_to include('test_refresh_token', 'secret_access', 'secret_refresh')
@@ -354,8 +394,6 @@ RSpec.describe EbaySellerApi do
   end
 
   describe 'OAuth scopes' do
-    let(:inventory) { EbaySellerApi::Resources::SELL_INVENTORY }
-    let(:fulfillment) { EbaySellerApi::Resources::SELL_FULFILLMENT }
     let(:xml_file) do
       Tempfile.new(['feed', '.xml']).tap do |tempfile|
         tempfile.write('<BulkDataExchangeRequests/>')
@@ -378,61 +416,29 @@ RSpec.describe EbaySellerApi do
               .map { |request| URI.decode_www_form(request.body).to_h['scope'] }
     end
 
-    def bearer_tokens_for(path)
-      requests = WebMock::RequestRegistry.instance.requested_signatures.hash.keys
-      requests.select { |request| request.uri.path.include?(path) }.map { |request| request.headers['Authorization'] }
-    end
-
-    it 'refreshes only sell.inventory for listing feeds' do
+    it 'shares one access token for the configured scopes across resources' do
       described_class.listings.submit_feed(xml_file.path, 'LMS_ADD_FIXED_PRICE_ITEM')
-      described_class.listings.get_listing_status('task-1')
-
-      expect(refreshed_scopes).to eq([inventory])
-    end
-
-    it 'refreshes only sell.fulfillment for orders and order feeds' do
       described_class.orders.get_orders
-      described_class.orders.create_order_report_task
-      described_class.orders.submit_order_acknowledgement(xml_file.path)
-
-      expect(refreshed_scopes).to eq([fulfillment])
-    end
-
-    it 'keeps one access token per scope and sends the matching one with each request' do
-      stub_request(:post, %r{/identity/v1/oauth2/token}).to_return do |request|
-        scope = URI.decode_www_form(request.body).to_h['scope']
-        { status: 200, headers: { 'Content-Type' => 'application/json' },
-          body: { 'access_token' => "token for #{scope.split('.').last}", 'expires_in' => 7200 }.to_json }
-      end
-
-      described_class.listings.get_listing_status('task-1')
-      described_class.orders.get_orders
-      described_class.listings.get_listing_status('task-1')
-
-      expect(bearer_tokens_for('/sell/feed/v1/task/')).to eq(['Bearer token for inventory'])
-      expect(bearer_tokens_for('/sell/fulfillment/v1/order')).to eq(['Bearer token for fulfillment'])
-    end
-
-    it 'refreshes only the expired scope' do
-      described_class.listings.get_listing_status('task-1')
-      described_class.orders.get_orders
-
-      travel_to(2.hours.from_now) { described_class.orders.get_orders }
-
-      expect(refreshed_scopes).to contain_exactly(inventory, fulfillment, fulfillment)
-    end
-
-    it 'uses the fixed scope for order and inventory tasks' do
-      described_class.tasks.get_order_tasks
       described_class.tasks.get_inventory_tasks
 
-      expect(refreshed_scopes).to eq([fulfillment, inventory])
+      expect(refreshed_scopes).to eq([scope_param])
     end
 
-    it 'requires a scope for task and schedule calls' do
-      expect { described_class.tasks.get_tasks }
-        .to raise_error(ArgumentError, 'An OAuth scope is required for GET /sell/feed/v1/task')
-      expect(refreshed_scopes).to be_empty
+    it 'refreshes the access token once it expires' do
+      described_class.orders.get_orders
+
+      travel_to(2.hours.from_now) { described_class.listings.get_listing_status('task-1') }
+
+      expect(refreshed_scopes).to eq([scope_param, scope_param])
+    end
+
+    it 'requests a new access token when config.scopes changes' do
+      described_class.orders.get_orders
+      described_class.config.scopes = ['https://api.ebay.com/oauth/api_scope/sell.fulfillment']
+
+      described_class.orders.get_orders
+
+      expect(refreshed_scopes).to eq([scope_param, 'https://api.ebay.com/oauth/api_scope/sell.fulfillment'])
     end
   end
 
@@ -807,10 +813,6 @@ RSpec.describe EbaySellerApi do
   describe '.notifications' do
     let(:notifications) { described_class.notifications }
     let(:notification) { 'https://api.sandbox.ebay.com/commerce/notification/v1' }
-    let(:order_confirmation_scopes) do
-      [EbaySellerApi::Resources::NOTIFICATION_SUBSCRIPTION, EbaySellerApi::Resources::SELL_FULFILLMENT,
-       EbaySellerApi::Resources::SELL_FULFILLMENT_READONLY]
-    end
 
     before do
       stub_request(:post, %r{/identity/v1/oauth2/token})
@@ -820,11 +822,6 @@ RSpec.describe EbaySellerApi do
           headers: { 'Content-Type' => 'application/json' },
           body: { 'access_token' => 'application_access_token', 'expires_in' => 7200 }.to_json
         )
-      stub_request(:get, "#{notification}/topic/ORDER_CONFIRMATION").to_return(
-        status: 200,
-        headers: { 'Content-Type' => 'application/json' },
-        body: { 'topicId' => 'ORDER_CONFIRMATION', 'authorizationScopes' => order_confirmation_scopes }.to_json
-      )
     end
 
     it 'returns a notifications resource' do
@@ -867,6 +864,33 @@ RSpec.describe EbaySellerApi do
       end
     end
 
+    context 'without config.scopes' do
+      before do
+        described_class.config.scopes = nil
+        described_class.config.refresh_token = nil
+      end
+
+      it 'gets a topic with only the application access token' do
+        api_request = stub_request(:get, "#{notification}/topic/ORDER_CONFIRMATION")
+                      .with(headers: { 'Authorization' => 'Bearer application_access_token' })
+
+        notifications.get_topic('ORDER_CONFIRMATION')
+
+        expect(api_request).to have_been_made.once
+        expect(a_request(:post, %r{/identity/v1/oauth2/token})
+          .with(body: hash_including('grant_type' => 'client_credentials',
+                                     'scope' => 'https://api.ebay.com/oauth/api_scope'))).to have_been_made.once
+      end
+
+      it 'raises before a seller request' do
+        described_class.config.refresh_token = 'test_refresh_token'
+
+        expect { notifications.get_subscription('subscription-1') }
+          .to raise_error(ArgumentError, 'scopes is required to request an access token')
+        expect(a_request(:any, %r{/commerce/notification/})).not_to have_been_made
+      end
+    end
+
     it 'sends the request body as JSON' do
       body = nil
       stub_request(:post, "#{notification}/subscription").with do |req|
@@ -886,43 +910,6 @@ RSpec.describe EbaySellerApi do
         'status' => 'ENABLED',
         'payload' => { 'format' => 'JSON', 'schemaVersion' => '1.0', 'deliveryProtocol' => 'HTTPS' }
       )
-    end
-
-    describe '#create_subscription scopes' do
-      def user_token_request(scopes)
-        a_request(:post, %r{/identity/v1/oauth2/token})
-          .with(body: hash_including('grant_type' => 'refresh_token', 'scope' => scopes.join(' ')))
-      end
-
-      before { stub_request(:post, "#{notification}/subscription") }
-
-      it "requests one user access token covering the subscription and the topic's authorizationScopes" do
-        notifications.create_subscription(topicId: 'ORDER_CONFIRMATION')
-
-        expect(user_token_request(order_confirmation_scopes)).to have_been_made.once
-      end
-
-      it 'reads the topicId from string keys too' do
-        notifications.create_subscription('topicId' => 'ORDER_CONFIRMATION')
-
-        expect(user_token_request(order_confirmation_scopes)).to have_been_made.once
-      end
-
-      it 'uses only the subscription scope when the topic lists no authorizationScopes' do
-        stub_request(:get, "#{notification}/topic/MARKETPLACE_ACCOUNT_DELETION")
-          .to_return(status: 200, headers: { 'Content-Type' => 'application/json' },
-                     body: { 'topicId' => 'MARKETPLACE_ACCOUNT_DELETION' }.to_json)
-
-        notifications.create_subscription(topicId: 'MARKETPLACE_ACCOUNT_DELETION')
-
-        expect(user_token_request([EbaySellerApi::Resources::NOTIFICATION_SUBSCRIPTION])).to have_been_made.once
-      end
-
-      it 'requires the topicId' do
-        expect do
-          notifications.create_subscription(destinationId: 'destination-1')
-        end.to raise_error(ArgumentError, 'Missing required argument: topic_id')
-      end
     end
 
     it 'requests a new application access token and retries once when eBay rejects it' do

@@ -33,6 +33,12 @@ EbaySellerApi.configure do |config|
   config.client_id = "your_client_id"
   config.client_secret = "your_client_secret"
   config.ru_name = "your_ru_name"           # for the consent flow
+  config.scopes = [                         # for the consent flow and seller calls
+    "https://api.ebay.com/oauth/api_scope/sell.inventory",
+    "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
+    "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+    "https://api.ebay.com/oauth/api_scope/commerce.notification.subscription"
+  ]
   config.refresh_token = "seller_refresh_token"
   config.environment = :sandbox             # or :production
   config.logger = Rails.logger              # Optional
@@ -53,13 +59,17 @@ tokens = EbaySellerApi.oauth.obtain_token(params[:code])
 tokens["refresh_token"] # store it and set config.refresh_token
 ```
 
-The consent page asks for every scope the gem needs, so there is no scope to configure. Each request uses an access
-token with only its own scope (`sell.inventory` for listings, `sell.fulfillment` for orders), refreshed when it expires.
+The consent page asks for `config.scopes`, and every seller request uses one access token for those same scopes,
+refreshed when it expires. Include a scope for each API you call: `sell.inventory` for listings and inventory tasks,
+`sell.fulfillment` for orders and order tasks, and `commerce.notification.subscription` for subscriptions. The refresh
+token only covers the scopes the seller granted, so after adding a scope the seller has to go through the consent page
+again.
 
-Some endpoints act for the application rather than the seller, such as the Notification API's config, destinations 
-and public keys. For those, the gem requests an application access token (client credentials grant) with your 
+Some endpoints act for the application rather than the seller, such as the Notification API's config, destinations,
+topics and public keys. For those, the gem requests an application access token (client credentials grant) with your 
 'client_id' and 'client_secret', keeps it in memory and requests a new one when it expires. It needs no refresh 
-token.
+token or `scopes`, so a client configured with only `client_id` and `client_secret` can call them. Seller calls and
+`generate_auth_url` raise an `ArgumentError` when `scopes` is not set.
 
 ## Usage
 
@@ -106,9 +116,8 @@ eBay pushes notifications, such as 'ORDER_CONFIRMATION', to an HTTPS endpoint th
 Config, destination, topic and public key calls use the application access token. Subscription calls use the seller's 
 token, which needs the `commerce.notification.subscription` scope.
 
-`create_subscription` first calls `get_topic` for the `topicId` and adds the topic's `authorizationScopes` to that
-token. For example, `ORDER_CONFIRMATION` also needs `sell.fulfillment` and `sell.fulfillment.readonly`. The seller must
-have granted these scopes on the consent page (`CONSENT_SCOPES`).
+A topic can need more scopes to subscribe to, listed in its `authorizationScopes` (see `get_topic`). For example,
+`ORDER_CONFIRMATION` also needs `sell.fulfillment` and `sell.fulfillment.readonly`. Include them in `config.scopes`.
 
 `Create`, `update` and `test` calls return an empty body. `Create` calls return the new ID in the `location` header;
 then `EbaySellerApi::Resources::Notifications.created_id(response` reads it.

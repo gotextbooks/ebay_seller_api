@@ -2,6 +2,8 @@
 
 module EbaySellerApi
   class OAuth2
+    APPLICATION_SCOPE = 'https://api.ebay.com/oauth/api_scope'
+
     attr_reader :configuration
 
     def self.tokens
@@ -14,7 +16,8 @@ module EbaySellerApi
       @refresh_token = configuration.refresh_token
     end
 
-    def generate_auth_url(scope: Resources::CONSENT_SCOPES, state: '')
+    def generate_auth_url(scope: configuration.scopes, state: '')
+      require_scopes!(scope, 'scopes is required.')
       ru_name = configuration.ru_name
       raise ArgumentError, 'RuName is required.' if ru_name.blank?
 
@@ -28,9 +31,11 @@ module EbaySellerApi
       ].join
     end
 
-    def access_token(scope)
+    def access_token(scope = configuration.scopes)
       token = self.class.tokens[token_key(scope)]
       return token.access_token if token&.usable?
+
+      require_scopes!(scope)
       raise ArgumentError, 'refresh_token is required to request an access token' if @refresh_token.blank?
 
       refresh_user_access_token(scope)['access_token']
@@ -46,7 +51,8 @@ module EbaySellerApi
       token
     end
 
-    def refresh_user_access_token(scope)
+    def refresh_user_access_token(scope = configuration.scopes)
+      require_scopes!(scope)
       raise Error, 'Failed to refresh the user access token. refresh_token is not set.' if @refresh_token.blank?
 
       request_token(grant_type: 'refresh_token', refresh_token: @refresh_token, scope: Array(scope).join(' '))
@@ -57,7 +63,7 @@ module EbaySellerApi
       token = self.class.tokens[application_token_key] unless refresh
       return token.access_token if token&.usable?
 
-      data = request_token(grant_type: 'client_credentials', scope: Resources::API_SCOPE)
+      data = request_token(grant_type: 'client_credentials', scope: APPLICATION_SCOPE)
       self.class.tokens[application_token_key] = build_token(data)
       data['access_token']
     end
@@ -68,6 +74,10 @@ module EbaySellerApi
     end
 
     private
+
+    def require_scopes!(scope, message = 'scopes is required to request an access token')
+      raise ArgumentError, message if Array(scope).empty?
+    end
 
     def token_key(scope)
       [configuration.environment, configuration.client_id, @refresh_token, Array(scope).sort]
