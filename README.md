@@ -159,10 +159,33 @@ response = notifications.create_subscription(
   }
 )
 subscription_id = EbaySellerApi::Resources::Notifications.created_id(response)
+data = {}
 
 # Check on them later
+notifications.get_subscriptions
 notifications.get_subscription(subscription_id)
+notifications.get_destinations
 notifications.get_destination(destination_id)
+
+# Change a destination's name, status or endpoint, or delete it
+notifications.update_destination(
+  destination_id,
+  {
+    name: 'order-confirmation-destination',
+    status: 'ENABLED',
+    deliveryConfig: {
+      endpoint: "https://example.com/ebay-seller-api/notifications",
+      verificationToken: verification_token
+    }
+  }
+)
+notifications.delete_destination(destination_id)
+
+# Change a subscription's destination, payload or status; its topic can't be changed
+notifications.update_subscription(subscription_id, data)
+notifications.enable_subscription(subscription_id)
+notifications.disable_subscription(subscription_id)
+notifications.delete_subscription(subscription_id)
 
 # Ask eBay to send a test notification to the destination
 notifications.test_subscription(subscription_id)

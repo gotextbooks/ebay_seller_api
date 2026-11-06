@@ -13,6 +13,10 @@ module EbaySellerApi
         put('/config', data, **app_token_params)
       end
 
+      def get_destinations(params = {})
+        get('/destination', query: params, **app_token_params)
+      end
+
       def create_destination(data)
         post('/destination', data, **app_token_params)
       end
@@ -23,10 +27,26 @@ module EbaySellerApi
         get("/destination/#{segment(destination_id)}", **app_token_params)
       end
 
+      def update_destination(destination_id, data)
+        require_id!(:destination_id, destination_id)
+
+        put("/destination/#{segment(destination_id)}", data, **app_token_params)
+      end
+
+      def delete_destination(destination_id)
+        require_id!(:destination_id, destination_id)
+
+        delete("/destination/#{segment(destination_id)}", **app_token_params)
+      end
+
       def get_topic(topic_id)
         require_id!(:topic_id, topic_id)
 
         get("/topic/#{segment(topic_id)}", **app_token_params)
+      end
+
+      def get_subscriptions(params = {})
+        get('/subscription', query: params)
       end
 
       def create_subscription(data)
@@ -37,6 +57,30 @@ module EbaySellerApi
         require_id!(:subscription_id, subscription_id)
 
         get("/subscription/#{segment(subscription_id)}")
+      end
+
+      def update_subscription(subscription_id, data)
+        require_id!(:subscription_id, subscription_id)
+
+        put("/subscription/#{segment(subscription_id)}", data)
+      end
+
+      def delete_subscription(subscription_id)
+        require_id!(:subscription_id, subscription_id)
+
+        delete("/subscription/#{segment(subscription_id)}")
+      end
+
+      def enable_subscription(subscription_id)
+        require_id!(:subscription_id, subscription_id)
+
+        post("/subscription/#{segment(subscription_id)}/enable")
+      end
+
+      def disable_subscription(subscription_id)
+        require_id!(:subscription_id, subscription_id)
+
+        post("/subscription/#{segment(subscription_id)}/disable")
       end
 
       def test_subscription(subscription_id)
