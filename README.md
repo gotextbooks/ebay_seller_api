@@ -164,6 +164,7 @@ data = {}
 # Check on them later
 notifications.get_subscriptions
 notifications.get_subscription(subscription_id)
+notifications.get_destinations
 notifications.get_destination(destination_id)
 
 # Change a destination's name, status or endpoint, or delete it

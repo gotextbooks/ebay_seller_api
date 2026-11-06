@@ -830,6 +830,7 @@ RSpec.describe EbaySellerApi do
 
     {
       [:update_config, :put, '/config'] => [{ alertEmail: 'alerts@example.com' }],
+      [:get_destinations, :get, '/destination'] => [],
       [:create_destination, :post, '/destination'] => [{ name: 'willamette' }],
       [:get_destination, :get, '/destination/destination-1'] => ['destination-1'],
       [:update_destination, :put, '/destination/destination-1'] => ['destination-1', { status: 'DISABLED' }],
@@ -924,6 +925,15 @@ RSpec.describe EbaySellerApi do
                     .with(query: { 'limit' => '20', 'continuation_token' => 'next-page' })
 
       notifications.get_subscriptions(limit: 20, continuation_token: 'next-page')
+
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'sends the destination list query params' do
+      api_request = stub_request(:get, "#{notification}/destination")
+                    .with(query: { 'limit' => '20', 'continuation_token' => 'next-page' })
+
+      notifications.get_destinations(limit: 20, continuation_token: 'next-page')
 
       expect(api_request).to have_been_made.once
     end

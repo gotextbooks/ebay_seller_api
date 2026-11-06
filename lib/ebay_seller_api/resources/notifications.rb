@@ -13,6 +13,10 @@ module EbaySellerApi
         put('/config', data, **app_token_params)
       end
 
+      def get_destinations(params = {})
+        get('/destination', query: params, **app_token_params)
+      end
+
       def create_destination(data)
         post('/destination', data, **app_token_params)
       end
