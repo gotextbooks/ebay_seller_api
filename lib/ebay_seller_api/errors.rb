@@ -38,10 +38,12 @@ module EbaySellerApi
 
     def self.from_response(response)
       error = first_error_in(response.body)
+      message = error['message'] || 'eBay API request error'
       description = error['description'] || error['longMessage'] || response.reason_phrase.to_s
+      message = "#{message}: #{description}" unless description.empty?
 
       error_class(error, response.status).new(
-        error['message'] || 'eBay API request error', response.status, response.body, response.headers,
+        message, response.status, response.body, response.headers,
         description:, error_code: error['errorId'], first_error: error
       )
     end

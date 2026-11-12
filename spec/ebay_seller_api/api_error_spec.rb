@@ -21,7 +21,7 @@ RSpec.describe EbaySellerApi::ApiError do
 
       error = described_class.from_response(response)
 
-      expect(error.message).to eq('message')
+      expect(error.message).to eq('message: description')
       expect(error.description).to eq('description')
       expect(error.error_code).to eq(160_017)
     end
@@ -37,7 +37,7 @@ RSpec.describe EbaySellerApi::ApiError do
 
       error = described_class.from_response(response)
 
-      expect(error.message).to eq('message')
+      expect(error.message).to eq('message: Bad Request')
       expect(error.first_error).to eq('message' => 'message')
     end
 
@@ -49,7 +49,7 @@ RSpec.describe EbaySellerApi::ApiError do
 
       error = described_class.from_response(response)
 
-      expect(error.message).to eq('message')
+      expect(error.message).to eq('message: description')
       expect(error.description).to eq('description')
     end
 
@@ -68,25 +68,25 @@ RSpec.describe EbaySellerApi::ApiError do
     it do
       error = described_class.from_response(response_for('message', status: 503))
 
-      expect(error.message).to eq('message')
+      expect(error.message).to eq('message: Bad Request')
     end
 
     it do
       error = described_class.from_response(response_for({ 'errors' => [] }))
 
-      expect(error.message).to eq('Unknown eBay API Error')
+      expect(error.message).to eq("#{described_class::UNKNOWN['message']}: #{described_class::UNKNOWN['description']}")
     end
 
     it do
       error = described_class.from_response(response_for({ 'something' => 'else' }))
 
-      expect(error.message).to eq('Unknown eBay API Error')
+      expect(error.message).to eq("#{described_class::UNKNOWN['message']}: #{described_class::UNKNOWN['description']}")
     end
 
     it do
       error = described_class.from_response(response_for('', status: 500))
 
-      expect(error.message).to eq('eBay API Error')
+      expect(error.message).to eq('eBay API Error: No data is set in response result.')
       expect(error.description).to eq('No data is set in response result.')
     end
 
@@ -107,6 +107,7 @@ RSpec.describe EbaySellerApi::ApiError do
       error = described_class.from_response(response_for({ 'error' => 'invalid_grant' }))
 
       expect(error).to be_a(described_class::InvalidGrant)
+      expect(error.message).to eq('invalid_grant')
     end
 
     it do
