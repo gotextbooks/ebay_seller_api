@@ -100,6 +100,13 @@ orders = EbaySellerApi.orders.get_orders(filter: "orderfulfillmentstatus:{NOT_ST
 # Get a specific order
 order = EbaySellerApi.orders.get_order("ORDER123")
 
+# Refund an order line item (needs the sell.finances scope)
+EbaySellerApi.orders.issue_refund(
+  "ORDER123",
+  reasonForRefund: "OTHER_ADJUSTMENT",
+  refundItems: [{ lineItemId: "10000000001", refundAmount: { value: "5.00", currency: "USD" } }]
+)
+
 # Request an order report (returns the task ID)
 task_id = EbaySellerApi.orders.create_order_report_task(
   creationDateRange: { from: "2026-10-14T00:00:00.000Z", to: "2026-10-16T00:00:00.000Z" }

@@ -654,6 +654,35 @@ RSpec.describe EbaySellerApi do
       end
     end
 
+    describe '#issue_refund' do
+      let(:refund_body) do
+        {
+          reasonForRefund: 'OTHER_ADJUSTMENT',
+          refundItems: [{ lineItemId: '10-1', refundAmount: { value: '5.00', currency: 'USD' } }]
+        }
+      end
+
+      let!(:api_request) do
+        stub_request(:post, %r{/sell/fulfillment/v1/order/12-34/issue_refund$}).to_return(
+          headers: { 'Content-Type' => 'application/json' },
+          body: { 'refundId' => '5000', 'refundStatus' => 'PENDING' }.to_json
+        )
+      end
+
+      it 'posts the refund body for the order' do
+        body = nil
+        api_request.with do |req|
+          body = JSON.parse(req.body)
+        end
+
+        response = orders.issue_refund('12-34', refund_body)
+
+        expect(api_request).to have_been_made.once
+        expect(body).to eq(refund_body.deep_stringify_keys)
+        expect(response.body).to eq('refundId' => '5000', 'refundStatus' => 'PENDING')
+      end
+    end
+
     describe '#create_order_report_task' do
       let!(:api_request) do
         stub_request(:post, %r{/sell/feed/v1/order_task$}).to_return(

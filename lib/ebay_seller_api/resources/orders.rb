@@ -17,6 +17,10 @@ module EbaySellerApi
         get('/order', query: params)
       end
 
+      def issue_refund(order_id, body)
+        post("/order/#{segment(order_id)}/issue_refund", body)
+      end
+
       def create_order_report_task(filter_criteria = {})
         task_id_from(feed_tasks.create_order_task({
           feedType: ORDER_REPORT_FEED_TYPE,
