@@ -65,6 +65,9 @@ refreshed when it expires. Include a scope for each API you call: `sell.inventor
 token only covers the scopes the seller granted, so after adding a scope the seller has to go through the consent page
 again.
 
+To see which scopes the seller granted, call `EbaySellerApi.oauth.consented_scopes`. It requests an access token
+without a `scope`, which eBay issues for every consented scope, and introspects it. The scopes come back as full URLs.
+
 Some endpoints act for the application rather than the seller, such as the Notification API's config, destinations,
 topics and public keys. For those, the gem requests an application access token (client credentials grant) with your 
 'client_id' and 'client_secret', keeps it in memory and requests a new one when it expires. It needs no refresh 
@@ -159,10 +162,33 @@ response = notifications.create_subscription(
   }
 )
 subscription_id = EbaySellerApi::Resources::Notifications.created_id(response)
+data = {}
 
 # Check on them later
+notifications.get_subscriptions
 notifications.get_subscription(subscription_id)
+notifications.get_destinations
 notifications.get_destination(destination_id)
+
+# Change a destination's name, status or endpoint, or delete it
+notifications.update_destination(
+  destination_id,
+  {
+    name: 'order-confirmation-destination',
+    status: 'ENABLED',
+    deliveryConfig: {
+      endpoint: "https://example.com/ebay-seller-api/notifications",
+      verificationToken: verification_token
+    }
+  }
+)
+notifications.delete_destination(destination_id)
+
+# Change a subscription's destination, payload or status; its topic can't be changed
+notifications.update_subscription(subscription_id, data)
+notifications.enable_subscription(subscription_id)
+notifications.disable_subscription(subscription_id)
+notifications.delete_subscription(subscription_id)
 
 # Ask eBay to send a test notification to the destination
 notifications.test_subscription(subscription_id)

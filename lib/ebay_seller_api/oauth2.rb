@@ -59,6 +59,21 @@ module EbaySellerApi
         .tap { |token| self.class.tokens[token_key(scope)] = build_token(token) }
     end
 
+    def consented_scopes
+      raise Error, 'Failed to look up the consented scopes. refresh_token is not set.' if @refresh_token.blank?
+
+      access_token = request_token(grant_type: 'refresh_token', refresh_token: @refresh_token)['access_token']
+      introspection = @client.token_request(
+        {
+          token: access_token,
+          token_type_hint: 'access_token'
+        },
+        configuration.introspect_endpoint
+      ).body
+      
+      introspection['scope'].to_s.split
+    end
+
     def application_access_token(refresh: false)
       token = self.class.tokens[application_token_key] unless refresh
       return token.access_token if token&.usable?

@@ -71,6 +71,7 @@ RSpec.describe EbaySellerApi do
 
       expect(described_class.config.api_url).to eq('https://api.ebay.com')
       expect(described_class.config.authorize_endpoint).to eq('https://auth.ebay.com/oauth2/authorize')
+      expect(described_class.config.introspect_endpoint).to eq('https://api.ebay.com/identity/v1/oauth2/token/introspect')
     end
 
     it 'does not require scopes' do
@@ -220,6 +221,46 @@ RSpec.describe EbaySellerApi do
       end
     end
 
+    describe '#consented_scopes' do
+      let!(:introspect_request) do
+        stub_request(:post, 'https://api.sandbox.ebay.com/identity/v1/oauth2/token/introspect').to_return(
+          status: 200,
+          headers: { 'Content-Type' => 'application/json' },
+          body: { 'active' => true, 'scope' => scopes.join(' ') }.to_json
+        )
+      end
+
+      it 'introspects an access token refreshed without a scope' do
+        expect(oauth.consented_scopes).to eq(scopes)
+
+        expect(a_request(:post, 'https://api.sandbox.ebay.com/identity/v1/oauth2/token')
+          .with(body: { 'grant_type' => 'refresh_token', 'refresh_token' => 'test_refresh_token' },
+                basic_auth: %w[test_client_id test_client_secret])).to have_been_made.once
+        expect(introspect_request
+          .with(body: { 'token' => 'access_token', 'token_type_hint' => 'access_token' },
+                basic_auth: %w[test_client_id test_client_secret])).to have_been_made.once
+      end
+
+      it 'returns no scopes for an inactive token' do
+        stub_request(:post, 'https://api.sandbox.ebay.com/identity/v1/oauth2/token/introspect').to_return(
+          status: 200,
+          headers: { 'Content-Type' => 'application/json' },
+          body: { 'active' => false }.to_json
+        )
+
+        expect(oauth.consented_scopes).to eq([])
+      end
+
+      it 'requires a refresh token' do
+        described_class.config.refresh_token = nil
+        described_class.reset!
+
+        expect { described_class.oauth.consented_scopes }
+          .to raise_error(EbaySellerApi::Error, 'Failed to look up the consented scopes. refresh_token is not set.')
+        expect(a_request(:post, %r{/identity/v1/oauth2/token})).not_to have_been_made
+      end
+    end
+
     describe '#applicatin_access_token' do
       let!(:token_request) do
         stub_request(:post, %r{/identity/v1/oauth2/token}).to_return(
@@ -358,6 +399,19 @@ RSpec.describe EbaySellerApi do
 
       expect(output.string).to include('"refresh_token" => "[FILTERED]"', '"access_token" => "[FILTERED]"')
       expect(output.string).not_to include('test_refresh_token', 'secret_access', 'secret_refresh')
+    end
+
+    it 'filters the token out of introspection requests' do
+      stub_request(:post, %r{/token/introspect}).to_return(
+        status: 200,
+        headers: { 'Content-Type' => 'application/json' },
+        body: { 'active' => true, 'scope' => scope_param }.to_json
+      )
+
+      described_class.oauth.consented_scopes
+
+      expect(output.string).to include('"token" => "[FILTERED]"')
+      expect(output.string).not_to include('test_refresh_token', '"token" => "access_token"')
     end
 
     it 'logs requests without the Authorization header' do
@@ -830,8 +884,11 @@ RSpec.describe EbaySellerApi do
 
     {
       [:update_config, :put, '/config'] => [{ alertEmail: 'alerts@example.com' }],
+      [:get_destinations, :get, '/destination'] => [],
       [:create_destination, :post, '/destination'] => [{ name: 'willamette' }],
       [:get_destination, :get, '/destination/destination-1'] => ['destination-1'],
+      [:update_destination, :put, '/destination/destination-1'] => ['destination-1', { status: 'DISABLED' }],
+      [:delete_destination, :delete, '/destination/destination-1'] => ['destination-1'],
       [:get_topic, :get, '/topic/ORDER_CONFIRMATION'] => ['ORDER_CONFIRMATION'],
       [:get_public_key, :get, '/public_key/key-1'] => ['key-1']
     }.each do |(method_name, verb, path), arguments|
@@ -848,8 +905,13 @@ RSpec.describe EbaySellerApi do
     end
 
     {
+      [:get_subscriptions, :get, '/subscription'] => [],
       [:create_subscription, :post, '/subscription'] => [{ topicId: 'ORDER_CONFIRMATION' }],
       [:get_subscription, :get, '/subscription/subscription-1'] => ['subscription-1'],
+      [:update_subscription, :put, '/subscription/subscription-1'] => ['subscription-1', { status: 'DISABLED' }],
+      [:delete_subscription, :delete, '/subscription/subscription-1'] => ['subscription-1'],
+      [:enable_subscription, :post, '/subscription/subscription-1/enable'] => ['subscription-1'],
+      [:disable_subscription, :post, '/subscription/subscription-1/disable'] => ['subscription-1'],
       [:test_subscription, :post, '/subscription/subscription-1/test'] => ['subscription-1']
     }.each do |(method_name, verb, path), arguments|
       describe "##{method_name}" do
@@ -912,6 +974,35 @@ RSpec.describe EbaySellerApi do
       )
     end
 
+    it 'sends the list query params' do
+      api_request = stub_request(:get, "#{notification}/subscription")
+                    .with(query: { 'limit' => '20', 'continuation_token' => 'next-page' })
+
+      notifications.get_subscriptions(limit: 20, continuation_token: 'next-page')
+
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'sends the destination list query params' do
+      api_request = stub_request(:get, "#{notification}/destination")
+                    .with(query: { 'limit' => '20', 'continuation_token' => 'next-page' })
+
+      notifications.get_destinations(limit: 20, continuation_token: 'next-page')
+
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'sends the update body as JSON' do
+      body = nil
+      stub_request(:put, "#{notification}/subscription/subscription-1").with do |req|
+        body = JSON.parse(req.body)
+      end
+
+      notifications.update_subscription('subscription-1', status: 'DISABLED', destinationId: 'destination-2')
+
+      expect(body).to eq('status' => 'DISABLED', 'destinationId' => 'destination-2')
+    end
+
     it 'requests a new application access token and retries once when eBay rejects it' do
       stub_request(:post, %r{/identity/v1/oauth2/token})
         .with(body: hash_including('grant_type' => 'client_credentials'))
@@ -938,8 +1029,12 @@ RSpec.describe EbaySellerApi do
 
     {
       get_destination: :destination_id,
+      delete_destination: :destination_id,
       get_topic: :topic_id,
       get_subscription: :subscription_id,
+      delete_subscription: :subscription_id,
+      enable_subscription: :subscription_id,
+      disable_subscription: :subscription_id,
       test_subscription: :subscription_id,
       get_public_key: :public_key_id
     }.each do |method_name, id_name|
@@ -948,6 +1043,18 @@ RSpec.describe EbaySellerApi do
           notifications.public_send(method_name, ' ')
         end.to raise_error(ArgumentError, "Missing required argument: #{id_name}")
       end
+    end
+
+    it 'requires the destination_id for #update_destination' do
+      expect do
+        notifications.update_destination(' ', status: 'DISABLED')
+      end.to raise_error(ArgumentError, 'Missing required argument: destination_id')
+    end
+
+    it 'requires the subscription_id for #update_subscription' do
+      expect do
+        notifications.update_subscription(' ', status: 'DISABLED')
+      end.to raise_error(ArgumentError, 'Missing required argument: subscription_id')
     end
 
     describe 'Resources::Notifications.created_id' do
