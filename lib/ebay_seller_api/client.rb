@@ -11,7 +11,7 @@ module EbaySellerApi
       accept_language: 'Accept-Language',
       content_language: 'Content-Language'
     }.freeze
-    FILTERED_KEYS = %w[code access_token refresh_token].freeze
+    FILTERED_KEYS = %w[code access_token refresh_token token].freeze
 
     attr_reader :configuration, :oauth
 
@@ -37,8 +37,8 @@ module EbaySellerApi
       make_request(:delete, path, options)
     end
 
-    def token_request(form)
-      make_request(:post, configuration.identity_endpoint, form:)
+    def token_request(form, endpoint = configuration.identity_endpoint)
+      make_request(:post, endpoint, form:)
     end
 
     private

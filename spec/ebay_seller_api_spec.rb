@@ -71,6 +71,7 @@ RSpec.describe EbaySellerApi do
 
       expect(described_class.config.api_url).to eq('https://api.ebay.com')
       expect(described_class.config.authorize_endpoint).to eq('https://auth.ebay.com/oauth2/authorize')
+      expect(described_class.config.introspect_endpoint).to eq('https://api.ebay.com/identity/v1/oauth2/token/introspect')
     end
 
     it 'does not require scopes' do
@@ -220,6 +221,46 @@ RSpec.describe EbaySellerApi do
       end
     end
 
+    describe '#consented_scopes' do
+      let!(:introspect_request) do
+        stub_request(:post, 'https://api.sandbox.ebay.com/identity/v1/oauth2/token/introspect').to_return(
+          status: 200,
+          headers: { 'Content-Type' => 'application/json' },
+          body: { 'active' => true, 'scope' => scopes.join(' ') }.to_json
+        )
+      end
+
+      it 'introspects an access token refreshed without a scope' do
+        expect(oauth.consented_scopes).to eq(scopes)
+
+        expect(a_request(:post, 'https://api.sandbox.ebay.com/identity/v1/oauth2/token')
+          .with(body: { 'grant_type' => 'refresh_token', 'refresh_token' => 'test_refresh_token' },
+                basic_auth: %w[test_client_id test_client_secret])).to have_been_made.once
+        expect(introspect_request
+          .with(body: { 'token' => 'access_token', 'token_type_hint' => 'access_token' },
+                basic_auth: %w[test_client_id test_client_secret])).to have_been_made.once
+      end
+
+      it 'returns no scopes for an inactive token' do
+        stub_request(:post, 'https://api.sandbox.ebay.com/identity/v1/oauth2/token/introspect').to_return(
+          status: 200,
+          headers: { 'Content-Type' => 'application/json' },
+          body: { 'active' => false }.to_json
+        )
+
+        expect(oauth.consented_scopes).to eq([])
+      end
+
+      it 'requires a refresh token' do
+        described_class.config.refresh_token = nil
+        described_class.reset!
+
+        expect { described_class.oauth.consented_scopes }
+          .to raise_error(EbaySellerApi::Error, 'Failed to look up the consented scopes. refresh_token is not set.')
+        expect(a_request(:post, %r{/identity/v1/oauth2/token})).not_to have_been_made
+      end
+    end
+
     describe '#applicatin_access_token' do
       let!(:token_request) do
         stub_request(:post, %r{/identity/v1/oauth2/token}).to_return(
@@ -358,6 +399,19 @@ RSpec.describe EbaySellerApi do
 
       expect(output.string).to include('"refresh_token" => "[FILTERED]"', '"access_token" => "[FILTERED]"')
       expect(output.string).not_to include('test_refresh_token', 'secret_access', 'secret_refresh')
+    end
+
+    it 'filters the token out of introspection requests' do
+      stub_request(:post, %r{/token/introspect}).to_return(
+        status: 200,
+        headers: { 'Content-Type' => 'application/json' },
+        body: { 'active' => true, 'scope' => scope_param }.to_json
+      )
+
+      described_class.oauth.consented_scopes
+
+      expect(output.string).to include('"token" => "[FILTERED]"')
+      expect(output.string).not_to include('test_refresh_token', '"token" => "access_token"')
     end
 
     it 'logs requests without the Authorization header' do

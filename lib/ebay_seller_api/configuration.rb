@@ -36,6 +36,10 @@ module EbaySellerApi
       "#{api_url}/identity/v1/oauth2/token"
     end
 
+    def introspect_endpoint
+      "#{identity_endpoint}/introspect"
+    end
+
     def authorize_endpoint
       "https://auth.#{'sandbox.' if sandbox?}ebay.com/oauth2/authorize"
     end

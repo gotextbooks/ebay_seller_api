@@ -65,6 +65,9 @@ refreshed when it expires. Include a scope for each API you call: `sell.inventor
 token only covers the scopes the seller granted, so after adding a scope the seller has to go through the consent page
 again.
 
+To see which scopes the seller granted, call `EbaySellerApi.oauth.consented_scopes`. It requests an access token
+without a `scope`, which eBay issues for every consented scope, and introspects it. The scopes come back as full URLs.
+
 Some endpoints act for the application rather than the seller, such as the Notification API's config, destinations,
 topics and public keys. For those, the gem requests an application access token (client credentials grant) with your 
 'client_id' and 'client_secret', keeps it in memory and requests a new one when it expires. It needs no refresh 
