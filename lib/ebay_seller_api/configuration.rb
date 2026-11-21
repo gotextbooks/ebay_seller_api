@@ -32,6 +32,10 @@ module EbaySellerApi
       "https://api.#{'sandbox.' if sandbox?}ebay.com"
     end
 
+    def apiz_url
+      "https://apiz.#{'sandbox.' if sandbox?}ebay.com"
+    end
+
     def identity_endpoint
       "#{api_url}/identity/v1/oauth2/token"
     end
