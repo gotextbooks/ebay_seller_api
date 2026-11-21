@@ -6,7 +6,7 @@ A Ruby SDK for eBay's Sell APIs: bulk listing uploads as XML feeds, orders, orde
 
 - **Authentication**: OAuth2 consent flow and automatic access token refresh
 - **Listings**: Submit LMS XML listing feeds (add, revise, verify) and download their results
-- **Orders**: Get orders, request order reports and send order acknowledgements
+- **Orders**: Get orders, request order reports, send order acknowledgements and ship orders (shipping fulfillments)
 - **Feed tasks**: Get and create order and inventory tasks
 - **Notifications**: Subscribe to topics so eBay sends notifications to our registered endpoints
 - **Error handling**: Exception classes for eBay's error responses
@@ -109,7 +109,31 @@ report = EbaySellerApi.orders.get_order_report_result_file(task_id).body
 
 # Acknowledge orders with an OrderAck XML file (returns the task ID)
 EbaySellerApi.orders.submit_order_acknowledgement("/path/to/OrderAck.xml")
+
+# Ship a package (returns the fulfillment ID, which equals the tracking number)
+fulfillment_id = EbaySellerApi.orders.create_shipping_fulfillment("ORDER123", {
+  lineItems: [{ lineItemId: "10000000000001", quantity: 1 }],
+  shippedDate: "2026-11-20T18:00:00.000Z",
+  shippingCarrierCode: "USPS",
+  trackingNumber: "9400111899223197428490"
+})
+
+# Another package, including more units of a line item already shipped
+# (carrier and tracking number are required; not available in the sandbox)
+EbaySellerApi.orders.create_additional_shipping_fulfillment("ORDER123", {
+  lineItems: [{ lineItemId: "10000000000001", quantity: 1 }],
+  shippingCarrierCode: "USPS",
+  trackingNumber: "9400111899223197428491"
+})
+
+# Read back what eBay holds
+EbaySellerApi.orders.get_shipping_fulfillments("ORDER123").body["fulfillments"]
+EbaySellerApi.orders.get_shipping_fulfillment("ORDER123", fulfillment_id).body
 ```
+
+After `create_additional_shipping_fulfillment`, calling `create_shipping_fulfillment` again replaces all earlier
+fulfillments for that order. Shipping fulfillment calls go to `apiz.ebay.com` (`apiz.sandbox.ebay.com` in the sandbox),
+the host eBay documents for them.
 
 ### Notifications
 eBay pushes notifications, such as 'ORDER_CONFIRMATION', to an HTTPS endpoint that we registered as a destination.
