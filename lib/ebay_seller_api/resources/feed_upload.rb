@@ -55,10 +55,7 @@ module EbaySellerApi
       end
 
       def task_id_from(response)
-        task_id = response.headers['location'].to_s.split('/').last
-        raise Error, 'eBay returned no task ID (missing location header)' if task_id.blank?
-
-        task_id
+        id_from_location(response, 'task')
       end
 
       def require_task_id!(task_id)
