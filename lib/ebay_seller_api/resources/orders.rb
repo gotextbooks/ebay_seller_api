@@ -42,6 +42,35 @@ module EbaySellerApi
       def submit_order_acknowledgement(file_path)
         upload_feed(file_path, ORDER_ACK_FEED_TYPE, client.configuration.order_ack_schema_version)
       end
+
+      # Returns the fulfillment ID, which eBay sets to the tracking number when one is sent
+      def create_shipping_fulfillment(order_id, body)
+        id_from_location(post(fulfillments_path(order_id), body, apiz: true), 'fulfillment')
+      end
+
+      # For more packages, including more units of a line item already shipped. Calling
+      # create_shipping_fulfillment afterwards replaces all earlier fulfillments of the order.
+      def create_additional_shipping_fulfillment(order_id, body)
+        id_from_location(post("#{fulfillments_path(order_id)}/create_additional", body, apiz: true), 'fulfillment')
+      end
+
+      def get_shipping_fulfillments(order_id, params = {})
+        get(fulfillments_path(order_id), query: params, apiz: true)
+      end
+
+      def get_shipping_fulfillment(order_id, fulfillment_id)
+        require_id!(:fulfillment_id, fulfillment_id)
+
+        get("#{fulfillments_path(order_id)}/#{segment(fulfillment_id)}", apiz: true)
+      end
+
+      private
+
+      def fulfillments_path(order_id)
+        require_id!(:order_id, order_id)
+
+        "/order/#{segment(order_id)}/shipping_fulfillment"
+      end
     end
   end
 end
