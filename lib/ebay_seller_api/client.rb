@@ -102,14 +102,14 @@ module EbaySellerApi
 
     def build_headers(options, access_token)
       headers = Faraday::Utils::Headers.new
-      headers.update(options[:form] ? token_headers : api_headers(access_token))
+      headers.update(options[:form] ? token_headers : api_headers(access_token, options[:auth_scheme] || 'Bearer'))
       headers['Content-Type'] = options[:body].content_type if multipart?(options)
       headers
     end
 
-    def api_headers(access_token)
+    def api_headers(access_token, auth_scheme)
       config_headers = CONFIG_HEADERS.to_h { |setting, header| [header, configuration.public_send(setting)] }
-      DEFAULT_HEADERS.merge(config_headers.compact, 'Authorization' => "Bearer #{access_token}")
+      DEFAULT_HEADERS.merge(config_headers.compact, 'Authorization' => "#{auth_scheme} #{access_token}")
     end
 
     def token_headers

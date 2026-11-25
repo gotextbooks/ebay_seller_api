@@ -654,6 +654,35 @@ RSpec.describe EbaySellerApi do
       end
     end
 
+    describe '#issue_refund' do
+      let(:refund_body) do
+        {
+          reasonForRefund: 'OTHER_ADJUSTMENT',
+          refundItems: [{ lineItemId: '10-1', refundAmount: { value: '5.00', currency: 'USD' } }]
+        }
+      end
+
+      let!(:api_request) do
+        stub_request(:post, %r{/sell/fulfillment/v1/order/12-34/issue_refund$}).to_return(
+          headers: { 'Content-Type' => 'application/json' },
+          body: { 'refundId' => '5000', 'refundStatus' => 'PENDING' }.to_json
+        )
+      end
+
+      it 'posts the refund body for the order' do
+        body = nil
+        api_request.with do |req|
+          body = JSON.parse(req.body)
+        end
+
+        response = orders.issue_refund('12-34', refund_body)
+
+        expect(api_request).to have_been_made.once
+        expect(body).to eq(refund_body.deep_stringify_keys)
+        expect(response.body).to eq('refundId' => '5000', 'refundStatus' => 'PENDING')
+      end
+    end
+
     describe '#create_order_report_task' do
       let!(:api_request) do
         stub_request(:post, %r{/sell/feed/v1/order_task$}).to_return(
@@ -807,6 +836,52 @@ RSpec.describe EbaySellerApi do
         expect(body).to eq('feedType' => 'LMS_ORDER_ACK', 'schemaVersion' => '1.0')
         expect(upload_file_request).to have_been_made.once
       end
+    end
+  end
+
+  describe '.returns' do
+    let(:returns) { described_class.returns }
+
+    it 'returns a returns resource' do
+      expect(returns).to be_a(EbaySellerApi::Resources::Returns)
+    end
+
+    it 'reads a return with an IAF token' do
+      api_request = stub_request(:get, %r{/post-order/v2/return/5000123456$})
+                    .with(headers: { 'Authorization' => 'IAF access_token' })
+                    .to_return(headers: { 'Content-Type' => 'application/json' }, body: { summary: {} }.to_json)
+
+      expect(returns.get_return('5000123456').body).to eq('summary' => {})
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'decides a return' do
+      api_request = stub_request(:post, %r{/post-order/v2/return/5000123456/decide$})
+                    .with(body: { decision: 'APPROVE' }.to_json, headers: { 'Authorization' => 'IAF access_token' })
+
+      returns.decide('5000123456', decision: 'APPROVE')
+
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'refunds a return' do
+      refund_body = { refundDetail: { totalAmount: { value: 10.0, currency: 'USD' } } }
+      api_request = stub_request(:post, %r{/post-order/v2/return/5000123456/issue_refund$})
+                    .with(body: refund_body.to_json, headers: { 'Authorization' => 'IAF access_token' })
+                    .to_return(headers: { 'Content-Type' => 'application/json' },
+                               body: { refundStatus: 'SUCCESS' }.to_json)
+
+      expect(returns.issue_refund('5000123456', refund_body).body).to eq('refundStatus' => 'SUCCESS')
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'keeps Bearer tokens for the other APIs' do
+      api_request = stub_request(:get, %r{/sell/fulfillment/v1/order/1$})
+                    .with(headers: { 'Authorization' => 'Bearer access_token' })
+
+      described_class.orders.get_order('1')
+
+      expect(api_request).to have_been_made.once
     end
   end
 

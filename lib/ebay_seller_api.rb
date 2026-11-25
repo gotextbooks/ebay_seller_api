@@ -18,6 +18,7 @@ require_relative 'ebay_seller_api/resources/base'
 require_relative 'ebay_seller_api/resources/feed_upload'
 require_relative 'ebay_seller_api/resources/listings'
 require_relative 'ebay_seller_api/resources/orders'
+require_relative 'ebay_seller_api/resources/returns'
 require_relative 'ebay_seller_api/resources/tasks'
 require_relative 'ebay_seller_api/resources/notifications'
 
@@ -41,6 +42,10 @@ module EbaySellerApi
 
     def orders
       @orders ||= Resources::Orders.new(client)
+    end
+
+    def returns
+      @returns ||= Resources::Returns.new(client)
     end
 
     def tasks
