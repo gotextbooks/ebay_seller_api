@@ -839,6 +839,52 @@ RSpec.describe EbaySellerApi do
     end
   end
 
+  describe '.returns' do
+    let(:returns) { described_class.returns }
+
+    it 'returns a returns resource' do
+      expect(returns).to be_a(EbaySellerApi::Resources::Returns)
+    end
+
+    it 'reads a return with an IAF token' do
+      api_request = stub_request(:get, %r{/post-order/v2/return/5000123456$})
+                    .with(headers: { 'Authorization' => 'IAF access_token' })
+                    .to_return(headers: { 'Content-Type' => 'application/json' }, body: { summary: {} }.to_json)
+
+      expect(returns.get_return('5000123456').body).to eq('summary' => {})
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'decides a return' do
+      api_request = stub_request(:post, %r{/post-order/v2/return/5000123456/decide$})
+                    .with(body: { decision: 'APPROVE' }.to_json, headers: { 'Authorization' => 'IAF access_token' })
+
+      returns.decide('5000123456', decision: 'APPROVE')
+
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'refunds a return' do
+      refund_body = { refundDetail: { totalAmount: { value: 10.0, currency: 'USD' } } }
+      api_request = stub_request(:post, %r{/post-order/v2/return/5000123456/issue_refund$})
+                    .with(body: refund_body.to_json, headers: { 'Authorization' => 'IAF access_token' })
+                    .to_return(headers: { 'Content-Type' => 'application/json' },
+                               body: { refundStatus: 'SUCCESS' }.to_json)
+
+      expect(returns.issue_refund('5000123456', refund_body).body).to eq('refundStatus' => 'SUCCESS')
+      expect(api_request).to have_been_made.once
+    end
+
+    it 'keeps Bearer tokens for the other APIs' do
+      api_request = stub_request(:get, %r{/sell/fulfillment/v1/order/1$})
+                    .with(headers: { 'Authorization' => 'Bearer access_token' })
+
+      described_class.orders.get_order('1')
+
+      expect(api_request).to have_been_made.once
+    end
+  end
+
   describe '.notifications' do
     let(:notifications) { described_class.notifications }
     let(:notification) { 'https://api.sandbox.ebay.com/commerce/notification/v1' }

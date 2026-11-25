@@ -7,6 +7,7 @@ A Ruby SDK for eBay's Sell APIs: bulk listing uploads as XML feeds, orders, orde
 - **Authentication**: OAuth2 consent flow and automatic access token refresh
 - **Listings**: Submit LMS XML listing feeds (add, revise, verify) and download their results
 - **Orders**: Get orders, request order reports and send order acknowledgements
+- **Returns**: Read buyer returns, approve or decline them and refund them (Post-Order API)
 - **Feed tasks**: Get and create order and inventory tasks
 - **Notifications**: Subscribe to topics so eBay sends notifications to our registered endpoints
 - **Error handling**: Exception classes for eBay's error responses
@@ -116,6 +117,36 @@ report = EbaySellerApi.orders.get_order_report_result_file(task_id).body
 
 # Acknowledge orders with an OrderAck XML file (returns the task ID)
 EbaySellerApi.orders.submit_order_acknowledgement("/path/to/OrderAck.xml")
+```
+
+### Returns
+The Post-Order API takes the user access token with an `IAF` prefix instead of `Bearer`; the resource sends it that way.
+
+```ruby
+ebay_return = EbaySellerApi.returns.get_return("5000123456").body
+
+# Approve or decline a buyer's return request
+EbaySellerApi.returns.decide("5000123456", decision: "APPROVE")
+
+# Refund the return, which also closes it
+EbaySellerApi.returns.issue_refund(
+  "5000123456",
+  refundDetail: {
+    itemizedRefundDetail: [
+      { 
+        refundAmount: { 
+          value: 19.95,
+          currency: "USD"
+        },
+        refundFeeType: "PURCHASE_PRICE" 
+      }
+    ],
+    totalAmount: { 
+      value: 19.95,
+      currency: "USD" 
+    }
+  }
+)
 ```
 
 ### Notifications
